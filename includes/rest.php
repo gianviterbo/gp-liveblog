@@ -58,6 +58,7 @@ function gplb_rest() {
 			$include_notes = gplb_editor_can();
 			return array(
 				'live'      => gplb_is_live( $id ),
+				'pinned'    => gplb_pinned_video( $id ),
 				'entries'   => gplb_get_entries( $id, (int) $req->get_param( 'after_id' ), 80, $include_notes ),
 			);
 		},
@@ -97,6 +98,8 @@ function gplb_rest() {
 				$meta['_gplb_social_url'] = 'social' === $type ? $url : '';
 				$card = gplb_unfurl( $url );
 				if ( $card ) { $meta['_gplb_link_card'] = $card; }
+				$media = gplb_oembed_card( $url ); // YT/TikTok/IG rich preview
+				if ( $media ) { $meta['_gplb_media'] = $media; }
 				$content = $text;
 			}
 
@@ -189,7 +192,8 @@ function gplb_rest() {
 	) );
 
 	/* ── Watching heartbeat: viewers ping every 30s while the page/panel is
-	      open; the counter is a 2-minute sliding window of recent pings. ──── */
+	      open; the counter is a 2-minute sliding window of recent pings.
+	      With a visitor id the beat also feeds total-viewer analytics. ──── */
 	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\d+)/watch', array(
 		'methods'             => 'POST',
 		'permission_callback' => '__return_true',
@@ -198,7 +202,10 @@ function gplb_rest() {
 			if ( 'gp_liveblog' !== get_post_type( $id ) ) {
 				return new WP_Error( 'gplb_not_found', __( 'Liveblog not found.', 'gp-liveblog' ), array( 'status' => 404 ) );
 			}
-			$now   = time();
+			$body    = $req->get_json_params();
+			$visitor = gplb_visitor( $body['visitor'] ?? '' );
+			if ( $visitor ) { gplb_record_viewer( $id, $visitor ); }
+			$now    = time();
 			$recent = get_transient( 'gplb_watch_' . $id );
 			if ( ! is_array( $recent ) ) { $recent = array(); }
 			$recent[] = $now;
@@ -206,8 +213,78 @@ function gplb_rest() {
 			$recent = array_values( array_filter( $recent, function ( $t ) use ( $now ) { return $t >= $now - 120; } ) );
 			$recent = array_slice( $recent, -400 ); // hard cap
 			set_transient( 'gplb_watch_' . $id, $recent, 180 );
-			update_post_meta( $id, '_gplb_watching', count( $recent ) );
-			return array( 'ok' => true, 'watching' => count( $recent ) );
+			$watching = count( $recent );
+			update_post_meta( $id, '_gplb_watching', $watching );
+			// peak concurrent watchers (rolling max while live)
+			$peak = (int) get_post_meta( $id, '_gplb_peak_watching', true );
+			if ( $watching > $peak ) { update_post_meta( $id, '_gplb_peak_watching', $watching ); }
+			global $wpdb;
+			$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}gplb_viewers WHERE lb_id = %d", $id ) );
+			return array( 'ok' => true, 'watching' => $watching, 'viewers' => $total, 'peak' => max( $peak, $watching ) );
+		},
+	) );
+
+	/* ── Viewer reactions (v0.2.0): one reaction per visitor per entry,
+	      switching emoji is allowed; totals returned. Public. ──────────── */
+	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\d+)/entries/(?P<eid>\d+)/reactions', array(
+		'methods'             => 'POST',
+		'permission_callback' => '__return_true',
+		'callback'            => function ( $req ) {
+			$id  = (int) $req['id'];
+			$eid = (int) $req['eid'];
+			$e   = get_post( $eid );
+			if ( ! $e || 'gp_liveblog_entry' !== $e->post_type || (int) $e->post_parent !== $id || 'publish' !== $e->post_status ) {
+				return new WP_Error( 'gplb_not_found', __( 'Entry not found.', 'gp-liveblog' ), array( 'status' => 404 ) );
+			}
+			$body    = $req->get_json_params();
+			$emoji   = sanitize_key( $body['emoji'] ?? '' );
+			$visitor = gplb_visitor( $body['visitor'] ?? '' );
+			$remove  = ! empty( $body['remove'] );
+			if ( ! $visitor ) {
+				return new WP_Error( 'gplb_no_visitor', __( 'Visitor id required.', 'gp-liveblog' ), array( 'status' => 400 ) );
+			}
+			$totals = gplb_set_reaction( $eid, $id, $emoji, $visitor, $remove );
+			// bust the page stats cache so chips/panels catch up quickly
+			delete_transient( 'gplb_stats_' . $id );
+			return array( 'ok' => true, 'totals' => $totals, 'reacted' => $remove ? '' : $emoji );
+		},
+	) );
+
+	/* ── Pinned video (v0.2.0): editors embed a YT/TikTok/IG video above
+	      the entries. Empty url clears the pin. ────────────────────────── */
+	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\d+)/video', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () { return gplb_editor_can(); },
+		'callback'            => function ( $req ) {
+			$id = (int) $req['id'];
+			if ( 'gp_liveblog' !== get_post_type( $id ) ) {
+				return new WP_Error( 'gplb_not_found', __( 'Liveblog not found.', 'gp-liveblog' ), array( 'status' => 404 ) );
+			}
+			$body = $req->get_json_params();
+			$url  = esc_url_raw( trim( (string) ( $body['url'] ?? '' ) ) );
+			if ( '' === $url ) {
+				$pinned = gplb_save_pinned_video( $id, null );
+				return array( 'ok' => true, 'pinned' => $pinned );
+			}
+			$parsed = gplb_parse_video_url( $url );
+			if ( ! $parsed ) {
+				return new WP_Error( 'gplb_bad_video', __( 'Supported: YouTube, TikTok or Instagram links.', 'gp-liveblog' ), array( 'status' => 400 ) );
+			}
+			$pinned = gplb_save_pinned_video( $id, $parsed );
+			return array( 'ok' => true, 'pinned' => $pinned );
+		},
+	) );
+
+	/* ── Stats (v0.2.0): public rollup for chips + internal reporting. ─── */
+	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\d+)/stats', array(
+		'methods'             => 'GET',
+		'permission_callback' => '__return_true',
+		'callback'            => function ( $req ) {
+			$id = (int) $req['id'];
+			if ( 'gp_liveblog' !== get_post_type( $id ) ) {
+				return new WP_Error( 'gplb_not_found', __( 'Liveblog not found.', 'gp-liveblog' ), array( 'status' => 404 ) );
+			}
+			return gplb_liveblog_stats( $id );
 		},
 	) );
 
@@ -365,4 +442,56 @@ function gplb_unfurl( $url ) {
 
 	set_transient( $key, $card, 12 * HOUR_IN_SECONDS );
 	return $card;
+}
+
+/* ── oEmbed media previews (v0.2.0): YouTube/TikTok/Instagram ──────────
+   Platform oEmbed gives a reliable thumbnail + title where generic og
+   scraping is often blocked. Cached 1h per URL. */
+
+function gplb_oembed_card( $url ) {
+	$parsed = gplb_parse_video_url( $url );
+	if ( ! $parsed ) { return null; } // not a supported platform link
+	$key = 'gplb_oembed_' . md5( $url );
+	$hit = get_transient( $key );
+	if ( false !== $hit ) { return $hit; }
+
+	$ep = '';
+	if ( 'youtube' === $parsed['type'] ) { $ep = 'https://www.youtube.com/oembed?format=json&url=' . rawurlencode( $url ); }
+	elseif ( 'tiktok' === $parsed['type'] ) { $ep = 'https://www.tiktok.com/oembed?url=' . rawurlencode( $url ); }
+	elseif ( 'instagram' === $parsed['type'] ) { $ep = 'https://graph.facebook.com/v18.0/instagram_oembed?url=' . rawurlencode( $url ) . '&access_token=' . rawurlencode( (string) apply_filters( 'gplb_ig_oembed_token', '' ) ); }
+
+	$media = $parsed;
+	if ( $ep ) {
+		$resp = wp_remote_get( $ep, array(
+			'timeout'    => 10,
+			'redirection' => 3,
+			'user-agent' => 'GadgetPilipinas Liveblog (oembed)',
+		) );
+		if ( ! is_wp_error( $resp ) && 200 === wp_remote_retrieve_response_code( $resp ) ) {
+			$j = json_decode( wp_remote_retrieve_body( $resp ), true );
+			if ( is_array( $j ) ) {
+				$media['title']  = mb_substr( wp_strip_all_tags( (string) ( $j['title'] ?? '' ) ), 0, 300 );
+				$media['author'] = mb_substr( wp_strip_all_tags( (string) ( $j['author_name'] ?? '' ) ), 0, 120 );
+				$media['image']  = esc_url_raw( (string) ( $j['thumbnail_url'] ?? '' ) );
+				if ( ! empty( $j['thumbnail_width'] ) ) { $media['width'] = (int) $j['thumbnail_width']; }
+			}
+		}
+	}
+	// Instagram needs a Meta token; fall back to generic og scrape if no token.
+	if ( 'instagram' === $parsed['type'] && empty( $media['image'] ) && empty( $media['title'] ) ) {
+		$og = gplb_unfurl( $url );
+		if ( $og ) {
+			$media['title'] = $og['title'] ?? '';
+			$media['image'] = $og['image'] ?? '';
+			$media['author'] = '';
+		}
+	}
+	// YouTube always has a thumbnail; synthesize one for TikTok edge cases
+	// so the card still renders wide and pretty.
+	if ( 'youtube' === $parsed['type'] && empty( $media['image'] ) ) {
+		$media['image'] = 'https://i.ytimg.com/vi/' . rawurlencode( $parsed['id'] ) . '/hqdefault.jpg';
+	}
+	$media = array_filter( $media, function ( $v ) { return null !== $v && '' !== $v; } );
+	set_transient( $key, $media, HOUR_IN_SECONDS );
+	return $media;
 }

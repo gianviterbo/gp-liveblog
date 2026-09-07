@@ -4,7 +4,7 @@ Tags: liveblog, live coverage, events, realtime
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.4
+Stable tag: 0.2.0
 License: GPLv2 or later
 
 Real-time live coverage for launches & press events, built into the GP stack.
@@ -60,6 +60,18 @@ No. Pages render server-side and cache normally; live updates ride a
 cache-busted REST poll, so LiteSpeed/Bunny HTML caching is untouched.
 
 == Changelog ==
+= 0.2.0 =
+* Viewer reactions on every entry (live page + embeds): like/smile/laugh/
+  sad/dislike/doubt/angry — one per visitor, switchable; counts everywhere.
+* Insights: total viewers (unique visitors), peak concurrent watchers,
+  reaction totals + per-entry counts; public stats chips on the live page
+  and a stats row in the wp-admin control room; /liveblogs/{id}/stats API.
+* YouTube / TikTok / Instagram links now render rich media preview cards
+  (oEmbed thumbnail + title + author); YouTube plays inline on click.
+* Pinned video: editors embed a video above the live updates (composer on
+  the live page or the control room); viewers see it within ~20s of pin.
+* Special Coverage card: LIVE COVERAGE button sits inline beside the CTA
+  (same height, compact) instead of below it.
 = 0.1.4 =
 * QR Code Composer now works on live pages: the plugin loads the QR library +
   painter on gp_liveblog pages (the theme only loads them on posts) and the

@@ -47,6 +47,17 @@ get_header();
 					<span><?php esc_html_e( 'Updated', 'gp-liveblog' ); ?> <time datetime="<?php echo esc_attr( get_the_modified_date( 'c' ) ); ?>"><?php echo esc_html( get_the_modified_time( 'g:i A' ) ); ?></time></span>
 					<span class="gplb-watching"><span class="gplb-live-dot"></span><span data-gplb-watching><?php echo esc_html( number_format_i18n( (int) get_post_meta( $gplb_id, '_gplb_watching', true ) ?: 0 ) ); ?></span> <?php esc_html_e( 'watching', 'gp-liveblog' ); ?></span>
 				</div>
+				<?php
+				// Public roll-up: total viewers, reactions, entries (live + final).
+				$gplb_stats = gplb_liveblog_stats( $gplb_id );
+				?>
+				<div class="gplb-stats" id="gplbStats">
+					<span class="gplb-stat"><span aria-hidden="true">👁</span> <b data-gplb-stat="viewers"><?php echo esc_html( number_format_i18n( $gplb_stats['viewers'] ) ); ?></b> <?php esc_html_e( 'viewers', 'gp-liveblog' ); ?></span>
+					<span class="gplb-stat gplb-stat-liveonly"<?php echo $gplb_live ? '' : ' hidden'; ?>><span class="gplb-live-dot" aria-hidden="true"></span> <b data-gplb-stat="watching"><?php echo esc_html( number_format_i18n( $gplb_stats['watching'] ) ); ?></b> <?php esc_html_e( 'now', 'gp-liveblog' ); ?></span>
+					<span class="gplb-stat"><span aria-hidden="true">⚡</span> <b data-gplb-stat="peak"><?php echo esc_html( number_format_i18n( $gplb_stats['peak'] ) ); ?></b> <?php esc_html_e( 'peak', 'gp-liveblog' ); ?></span>
+					<span class="gplb-stat"><span aria-hidden="true">❤</span> <b data-gplb-stat="reactions"><?php echo esc_html( number_format_i18n( $gplb_stats['reactions'] ) ); ?></b> <?php esc_html_e( 'reactions', 'gp-liveblog' ); ?></span>
+					<span class="gplb-stat"><span aria-hidden="true">✍</span> <b data-gplb-stat="entries"><?php echo esc_html( number_format_i18n( $gplb_stats['entries'] ) ); ?></b> <?php esc_html_e( 'updates', 'gp-liveblog' ); ?></span>
+				</div>
 			</header>
 		</div>
 
@@ -83,6 +94,11 @@ get_header();
 							<button class="gplb-btn gplb-btn-primary" id="gplbLivePublish" type="button"><?php esc_html_e( 'Publish', 'gp-liveblog' ); ?></button>
 							<span class="gplb-status" id="gplbLiveStatus" role="status"></span>
 						</div>
+						<div class="gplb-videorow">
+							<input type="url" id="gplbLiveVideoUrl" placeholder="<?php esc_attr_e( 'Pin a video above the updates — YouTube, TikTok or Instagram URL', 'gp-liveblog' ); ?>">
+							<button class="gplb-btn" type="button" id="gplbLiveVideoPin">🎥 <?php esc_html_e( 'Pin video', 'gp-liveblog' ); ?></button>
+							<span class="gplb-status" id="gplbLiveVideoStatus" role="status"></span>
+						</div>
 					</div>
 				<?php else : ?>
 					<p class="gplb-livecomposer-note">
@@ -101,6 +117,24 @@ get_header();
 				<?php endif; ?>
 			</div>
 			<?php endif; ?>
+
+			<?php
+			/* Pinned video (editors embed a stream above the updates). */
+			$gplb_pinned = gplb_pinned_video( $gplb_id );
+			?>
+			<div class="gplb-pinned" id="gplbPinned" data-live="<?php echo $gplb_live ? '1' : '0'; ?>">
+				<?php if ( $gplb_pinned ) : ?>
+				<div class="gplb-pinned-frame" id="gplbPinnedFrame">
+					<div class="gplb-pinned-head">
+						<span class="gplb-pinned-label"><span aria-hidden="true">🎥</span> <?php esc_html_e( 'Live video', 'gp-liveblog' ); ?></span>
+						<?php if ( $gplb_canpost ) : ?>
+							<button type="button" class="gplb-pinned-x" id="gplbPinnedRemove"><?php esc_html_e( 'Remove', 'gp-liveblog' ); ?></button>
+						<?php endif; ?>
+					</div>
+					<div class="gplb-pinned-ratio"><?php echo gplb_pinned_video_embed( $gplb_pinned ); // phpcs:ignore WordPress.Security.EscapeOutput -- iframe built above ?></div>
+				</div>
+				<?php endif; ?>
+			</div>
 
 			<div class="gplb-timeline" id="gplbTimeline" data-id="<?php echo (int) $gplb_id; ?>">
 				<?php if ( ! $gplb_entries ) : ?>

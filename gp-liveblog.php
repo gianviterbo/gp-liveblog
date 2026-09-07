@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GP Liveblog
  * Description: Real-time live coverage for launches & press events — team-authored entries (text, WebP images, link cards, social embeds, private team notes), auto-updating viewer feed, floating LIVE panel, collapsible embeds, LiveBlogPosting schema. Editors post from wp-admin control room or a frontend overlay; Admin owns liveblog lifecycle.
- * Version: 0.1.4
+ * Version: 0.2.0
  * Author: Gadget Pilipinas
  * Text Domain: gp-liveblog
  *
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GPLB_VERSION', '0.1.4' );
+define( 'GPLB_VERSION', '0.2.0' );
 define( 'GPLB_FILE', __FILE__ );
 define( 'GPLB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPLB_URL', plugin_dir_url( __FILE__ ) );
@@ -207,6 +207,221 @@ add_action( 'wp_after_insert_post', function ( $post_id, $post ) {
 	}
 }, 10, 2 );
 
+/* ── Engagement: viewer reactions + analytics (v0.2.0) ───────────────── */
+
+/** Reaction set — order defines the button order on entries. */
+function gplb_reactions() {
+	return array(
+		'like'    => '👍',
+		'smile'   => '😊',
+		'laugh'   => '😂',
+		'sad'     => '😢',
+		'dislike' => '👎',
+		'doubt'   => '🤔',
+		'angry'   => '😡',
+	);
+}
+
+/** Create engagement tables (idempotent; runs on activation + version bump). */
+function gplb_tables() {
+	global $wpdb;
+	$charset = $wpdb->get_charset_collate();
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}gplb_reactions (
+		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+		entry_id BIGINT UNSIGNED NOT NULL,
+		lb_id BIGINT UNSIGNED NOT NULL,
+		emoji VARCHAR(8) NOT NULL DEFAULT '',
+		visitor VARCHAR(64) NOT NULL DEFAULT '',
+		created DATETIME NOT NULL,
+		PRIMARY KEY  (id),
+		UNIQUE KEY uq_entry_visitor (entry_id, visitor),
+		KEY emoji (emoji),
+		KEY lb (lb_id)
+	) {$charset};" );
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}gplb_viewers (
+		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+		lb_id BIGINT UNSIGNED NOT NULL,
+		visitor VARCHAR(64) NOT NULL DEFAULT '',
+		first_seen DATETIME NOT NULL,
+		last_seen DATETIME NOT NULL,
+		PRIMARY KEY  (id),
+		UNIQUE KEY uq_lb_visitor (lb_id, visitor),
+		KEY last_seen (last_seen)
+	) {$charset};" );
+}
+
+function gplb_maybe_tables() {
+	if ( get_option( 'gplb_db_done', '' ) !== GPLB_VERSION ) {
+		gplb_tables();
+		update_option( 'gplb_db_done', GPLB_VERSION, false );
+	}
+}
+add_action( 'init', 'gplb_maybe_tables', 5 );
+register_activation_hook( GPLB_FILE, 'gplb_tables' );
+
+/** Sanitize an anonymous visitor id (client-generated uuid). */
+function gplb_visitor( $raw ) {
+	$v = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $raw );
+	return ( strlen( $v ) >= 8 && strlen( $v ) <= 64 ) ? $v : '';
+}
+
+/** Per-entry reaction counts: array( 'map' => emoji=>n, 'total' => n ). */
+function gplb_reaction_totals( $entry_id ) {
+	global $wpdb;
+	$rows = $wpdb->get_results( $wpdb->prepare(
+		"SELECT emoji, COUNT(*) AS n FROM {$wpdb->prefix}gplb_reactions WHERE entry_id = %d GROUP BY emoji",
+		(int) $entry_id
+	) );
+	$def   = array_fill_keys( array_keys( gplb_reactions() ), 0 );
+	$total = 0;
+	foreach ( (array) $rows as $r ) {
+		$key = array_search( $r->emoji, gplb_reactions(), true );
+		if ( $key ) { $def[ $key ] = (int) $r->n; $total += (int) $r->n; }
+	}
+	return array( 'map' => $def, 'total' => $total );
+}
+
+/** Batch totals for many entries (one grouped query). */
+function gplb_reactions_for( $entry_ids ) {
+	global $wpdb;
+	$out = array();
+	if ( ! $entry_ids ) { return $out; }
+	$ids  = array_map( 'intval', (array) $entry_ids );
+	$in   = implode( ',', $ids );
+	$def  = array_fill_keys( array_keys( gplb_reactions() ), 0 );
+	$rows = $wpdb->get_results( "SELECT entry_id, emoji, COUNT(*) AS n
+		FROM {$wpdb->prefix}gplb_reactions WHERE entry_id IN ({$in}) GROUP BY entry_id, emoji" ); // phpcs:ignore WordPress.DB -- ints only
+	foreach ( $ids as $id ) { $out[ $id ] = array( 'map' => $def, 'total' => 0 ); }
+	$by = gplb_reactions();
+	foreach ( (array) $rows as $r ) {
+		$eid = (int) $r->entry_id;
+		$key = array_search( $r->emoji, $by, true );
+		if ( $key && isset( $out[ $eid ] ) ) {
+			$out[ $eid ]['map'][ $key ] = (int) $r->n;
+			$out[ $eid ]['total']      += (int) $r->n;
+		}
+	}
+	return $out;
+}
+
+/** Add / switch / remove a visitor reaction. Returns new totals. */
+function gplb_set_reaction( $entry_id, $lb_id, $emoji, $visitor, $remove = false ) {
+	global $wpdb;
+	$by  = gplb_reactions();
+	$key = isset( $by[ $emoji ] ) ? $emoji : '';
+	if ( ! $key || ! $visitor ) { return gplb_reaction_totals( $entry_id ); }
+	$table    = $wpdb->prefix . 'gplb_reactions';
+	$existing = $wpdb->get_var( $wpdb->prepare(
+		"SELECT id FROM {$table} WHERE entry_id = %d AND visitor = %s",
+		(int) $entry_id, $visitor
+	) );
+	if ( $remove ) {
+		if ( $existing ) { $wpdb->delete( $table, array( 'id' => (int) $existing ) ); }
+	} elseif ( $existing ) {
+		$wpdb->update( $table, array( 'emoji' => $by[ $key ] ), array( 'id' => (int) $existing ) );
+	} else {
+		$wpdb->insert( $table, array(
+			'entry_id' => (int) $entry_id,
+			'lb_id'    => (int) $lb_id,
+			'emoji'    => $by[ $key ],
+			'visitor'  => $visitor,
+			'created'  => gmdate( 'Y-m-d H:i:s' ),
+		) );
+	}
+	return gplb_reaction_totals( $entry_id );
+}
+
+/** Record one unique viewer touch for total-viewer analytics. */
+function gplb_record_viewer( $lb_id, $visitor ) {
+	if ( ! $visitor ) { return; }
+	global $wpdb;
+	$table = $wpdb->prefix . 'gplb_viewers';
+	$now   = gmdate( 'Y-m-d H:i:s' );
+	$found = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE lb_id = %d AND visitor = %s", (int) $lb_id, $visitor ) );
+	if ( $found ) {
+		$wpdb->update( $table, array( 'last_seen' => $now ), array( 'id' => (int) $found ) );
+	} else {
+		$wpdb->insert( $table, array(
+			'lb_id'      => (int) $lb_id,
+			'visitor'    => $visitor,
+			'first_seen' => $now,
+			'last_seen'  => $now,
+		) );
+	}
+}
+
+/** Rollup stats for one liveblog (cached ~20s). */
+function gplb_liveblog_stats( $liveblog_id ) {
+	$id     = (int) $liveblog_id;
+	$cached = get_transient( 'gplb_stats_' . $id );
+	if ( is_array( $cached ) ) { return $cached; }
+	global $wpdb;
+	$out = array(
+		'viewers'   => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}gplb_viewers WHERE lb_id = %d", $id ) ),
+		'watching'  => (int) get_post_meta( $id, '_gplb_watching', true ),
+		'peak'      => (int) get_post_meta( $id, '_gplb_peak_watching', true ),
+		'entries'   => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'gp_liveblog_entry' AND post_status = 'publish' AND post_parent = %d", $id ) ),
+		'reactions' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}gplb_reactions WHERE lb_id = %d", $id ) ),
+		'live'      => gplb_is_live( $id ),
+	);
+	set_transient( 'gplb_stats_' . $id, $out, 20 );
+	return $out;
+}
+
+/* ── Pinned video (v0.2.0): editor-embedded video above the entries ──── */
+
+/** Parse a YouTube/TikTok/Instagram URL into type/url/embed/id, or null. */
+function gplb_parse_video_url( $url ) {
+	$u = esc_url_raw( trim( (string) $url ) );
+	if ( ! preg_match( '#^https?://#i', $u ) ) { return null; }
+	$host = strtolower( (string) wp_parse_url( $u, PHP_URL_HOST ) );
+	$path = (string) wp_parse_url( $u, PHP_URL_PATH );
+	$q    = (string) wp_parse_url( $u, PHP_URL_QUERY );
+	if ( preg_match( '/(^|\.)youtube\.com$|youtu\.be$/', $host ) ) {
+		$vid = '';
+		if ( preg_match( '/(?:^|[?&])v=([A-Za-z0-9_-]{6,20})/', $q, $m ) ) { $vid = $m[1]; }
+		elseif ( preg_match( '#^/(embed|shorts|live)/([A-Za-z0-9_-]{6,20})#', $path, $m ) ) { $vid = $m[2]; }
+		elseif ( preg_match( '#^/([A-Za-z0-9_-]{6,20})/?$#', $path, $m ) && false !== strpos( $host, 'youtu.be' ) ) { $vid = $m[1]; }
+		if ( ! $vid ) { return null; }
+		return array(
+			'type'  => 'youtube',
+			'url'   => 'https://www.youtube.com/watch?v=' . $vid,
+			'embed' => 'https://www.youtube-nocookie.com/embed/' . $vid,
+			'id'    => $vid,
+		);
+	}
+	if ( preg_match( '/(^|\.)tiktok\.com$/', $host ) && preg_match( '#/@[^/]+/video/(\d+)#', $path, $m ) ) {
+		return array( 'type' => 'tiktok', 'url' => $u, 'embed' => 'https://www.tiktok.com/player/v1/' . $m[1], 'id' => $m[1] );
+	}
+	if ( preg_match( '/(^|\.)instagram\.com$/', $host ) && preg_match( '#/(reel|p)/([A-Za-z0-9_-]+)#', $path, $m ) ) {
+		$kind = ( 'reel' === $m[1] ) ? 'reel' : 'p';
+		return array( 'type' => 'instagram', 'url' => $u, 'embed' => 'https://www.instagram.com/' . $kind . '/' . $m[2] . '/embed', 'id' => $m[2] );
+	}
+	return null;
+}
+
+function gplb_pinned_video( $liveblog_id ) {
+	$raw = get_post_meta( (int) $liveblog_id, '_gplb_pinned_video', true );
+	if ( ! is_array( $raw ) || empty( $raw['type'] ) || empty( $raw['embed'] ) || empty( $raw['url'] ) ) { return null; }
+	$raw['type'] = in_array( $raw['type'], array( 'youtube', 'tiktok', 'instagram' ), true ) ? $raw['type'] : 'youtube';
+	return $raw;
+}
+
+function gplb_save_pinned_video( $liveblog_id, $parsed ) {
+	if ( ! $parsed ) {
+		delete_post_meta( (int) $liveblog_id, '_gplb_pinned_video' );
+		return null;
+	}
+	$data = array(
+		'type'  => $parsed['type'],
+		'url'   => $parsed['url'],
+		'embed' => $parsed['embed'],
+		'id'    => $parsed['id'],
+	);
+	update_post_meta( (int) $liveblog_id, '_gplb_pinned_video', $data );
+	return $data;
+}
+
 /* ── Entry helpers ───────────────────────────────────────────────────── */
 
 /**
@@ -224,11 +439,18 @@ function gplb_get_entries( $liveblog_id, $after_id = 0, $limit = 60, $include_no
 		'order'          => 'DESC',
 	) );
 	$out = array();
+	$ids = array();
 	foreach ( $q->posts as $e ) {
 		if ( $after_id && (int) $e->ID <= (int) $after_id ) { continue; }
 		$type = get_post_meta( $e->ID, '_gplb_type', true ) ?: 'update';
 		if ( 'note' === $type && ! $include_notes ) { continue; }
 		$out[] = gplb_entry_shape( $e, $type );
+		$ids[] = (int) $e->ID;
+	}
+	$react = gplb_reactions_for( $ids );
+	foreach ( $out as $i => $shape ) {
+		$out[ $i ]['reactions']       = $react[ $shape['id'] ]['map'] ?? array_fill_keys( array_keys( gplb_reactions() ), 0 );
+		$out[ $i ]['reactions_total'] = $react[ $shape['id'] ]['total'] ?? 0;
 	}
 	return $out;
 }
@@ -237,6 +459,7 @@ function gplb_get_entries( $liveblog_id, $after_id = 0, $limit = 60, $include_no
 function gplb_entry_shape( $e, $type = null ) {
 	$type = $type ?: ( get_post_meta( $e->ID, '_gplb_type', true ) ?: 'update' );
 	$author = get_userdata( (int) $e->post_author );
+	$image_id = (int) get_post_meta( $e->ID, '_gplb_image_id', true );
 	return array(
 		'id'        => (int) $e->ID,
 		'type'      => $type,
@@ -250,9 +473,12 @@ function gplb_entry_shape( $e, $type = null ) {
 			'link_url'   => get_post_meta( $e->ID, '_gplb_link_url', true ),
 			'link_card'  => get_post_meta( $e->ID, '_gplb_link_card', true ), // serialized unfurl
 			'social_url' => get_post_meta( $e->ID, '_gplb_social_url', true ),
-			'image_id'   => (int) get_post_meta( $e->ID, '_gplb_image_id', true ),
-			'image_url'  => (int) get_post_meta( $e->ID, '_gplb_image_id', true ) ? wp_get_attachment_image_url( (int) get_post_meta( $e->ID, '_gplb_image_id', true ), 'large' ) : '',
+			'image_id'   => $image_id,
+			'image_url'  => $image_id ? wp_get_attachment_image_url( $image_id, 'large' ) : '',
+			'media'      => get_post_meta( $e->ID, '_gplb_media', true ), // yt/tiktok/ig preview
 		),
+		'reactions'       => array_fill_keys( array_keys( gplb_reactions() ), 0 ),
+		'reactions_total' => 0,
 	);
 }
 

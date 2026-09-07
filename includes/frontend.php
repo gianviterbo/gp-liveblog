@@ -120,21 +120,52 @@ function gplb_render_entry( $e ) {
 		$card = ! empty( $e['meta']['link_card'] ) && is_array( $e['meta']['link_card'] ) ? $e['meta']['link_card'] : array();
 		$url  = 'social' === $type ? ( $e['meta']['social_url'] ?: '' ) : ( $e['meta']['link_url'] ?: '' );
 		if ( $e['content'] ) { $body .= '<p>' . wp_kses_post( $e['raw'] ) . '</p>'; }
-		$body .= gplb_render_link_card( $card, $url, $type );
+		$media = ! empty( $e['meta']['media'] ) && is_array( $e['meta']['media'] ) ? $e['meta']['media'] : null;
+		$body .= gplb_render_link_card( $card, $url, $type, $media );
 	} else {
 		$body .= wp_kses_post( $e['content'] );
 	}
 
 	$note = ( 'note' === $type ) ? ' gplb-note' : '';
 	$tag  = ( 'note' === $type ) ? '<span class="gplb-lock" aria-hidden="true">🔒</span> ' : '';
+
+	// Viewer reactions (skipped on private team notes).
+	$foot = '';
+	if ( 'note' !== $type ) {
+		$tot   = ! empty( $e['reactions'] ) && is_array( $e['reactions'] ) ? $e['reactions'] : array();
+		$total = (int) ( $e['reactions_total'] ?? array_sum( $tot ) );
+		$foot  = '<footer class="gplb-react" data-entry="' . (int) $e['id'] . '">';
+		foreach ( gplb_reactions() as $rk => $re ) {
+			$n    = (int) ( $tot[ $rk ] ?? 0 );
+			$foot .= '<button type="button" class="gplb-react-btn" data-emoji="' . esc_attr( $rk ) . '" aria-label="' . esc_attr( $rk ) . '" title="' . esc_attr( $rk ) . '"><span class="gplb-react-ico" aria-hidden="true">' . $re . '</span><span class="gplb-react-n">' . number_format_i18n( $n ) . '</span></button>';
+		}
+		$foot .= '<span class="gplb-react-total" hidden>' . number_format_i18n( $total ) . '</span></footer>';
+	}
+
 	return sprintf(
-		'<article class="gplb-entry gplb-%s%s" data-id="%d" data-type="%s"><header class="gplb-entry-head"><span class="gplb-who">%s</span><span class="gplb-chip gplb-chip-%s">%s%s</span><time class="gplb-time">%s</time></header><div class="gplb-entry-body">%s</div></article>',
+		'<article class="gplb-entry gplb-%s%s" data-id="%d" data-type="%s"><header class="gplb-entry-head"><span class="gplb-who">%s</span><span class="gplb-chip gplb-chip-%s">%s%s</span><time class="gplb-time">%s</time></header><div class="gplb-entry-body">%s</div>%s</article>',
 		sanitize_html_class( $type ), $note, (int) $e['id'], esc_attr( $type ),
-		$who, sanitize_html_class( $type ), $tag, esc_html( $chip ), $time, $body
+		$who, sanitize_html_class( $type ), $tag, esc_html( $chip ), $time, $body, $foot
 	);
 }
 
-function gplb_render_link_card( $card, $url, $type = 'link' ) {
+function gplb_render_link_card( $card, $url, $type = 'link', $media = null ) {
+	// Rich media preview (YouTube/TikTok/Instagram) — thumbnail card that
+	// plays inline on click (YouTube) or opens the platform post.
+	if ( $media && ! empty( $media['type'] ) && in_array( $media['type'], array( 'youtube', 'tiktok', 'instagram' ), true ) && $url ) {
+		$img   = ! empty( $media['image'] ) ? '<img src="' . esc_url( $media['image'] ) . '" alt="" loading="lazy">' : '';
+		$title = ! empty( $media['title'] ) ? $media['title'] : ( $card['title'] ?? '' );
+		$host  = ! empty( $media['author'] ) ? $media['author'] : ( 'youtube' === $media['type'] ? 'YouTube' : ucfirst( $media['type'] ) );
+		$embed = esc_url( $media['embed'] ?? '' );
+		$play  = '<span class="gplb-media-play" aria-hidden="true">▶</span>';
+		$extra = 'youtube' === $media['type'] ? ' gplb-media--yt' : '';
+		return sprintf(
+			'<div class="gplb-media%s" data-media="%s" data-embed="%s"><a class="gplb-media-thumb" href="%s" target="_blank" rel="noopener nofollow">%s%s</a><a class="gplb-media-meta" href="%s" target="_blank" rel="noopener nofollow"><span class="gplb-card-host">%s</span><span class="gplb-media-title">%s</span></a></div>',
+			esc_attr( $extra ), esc_attr( $media['type'] ), $embed,
+			esc_url( $url ), $img, $play,
+			esc_url( $url ), esc_html( $host ), esc_html( $title )
+		);
+	}
 	if ( ! $card || empty( $card['title'] ) ) {
 		return '<a class="gplb-card" href="' . esc_url( $url ) . '" rel="nofollow noopener" target="_blank">' . esc_html( $url ) . '</a>';
 	}
@@ -151,6 +182,12 @@ function gplb_render_link_card( $card, $url, $type = 'link' ) {
 		esc_html( $card['title'] ),
 		! empty( $card['description'] ) ? '<span class="gplb-card-desc">' . esc_html( wp_trim_words( $card['description'], 22, '…' ) ) . '</span>' : ''
 	);
+}
+
+function gplb_pinned_video_embed( $p ) {
+	$src  = esc_url( $p['embed'] );
+	$t    = 'youtube' === $p['type'] ? 'YouTube' : ucfirst( $p['type'] );
+	return '<iframe title="' . esc_attr( $t ) . '" src="' . $src . '" width="100%" height="100%" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>';
 }
 
 /* ── Floating LIVE button + panel (all pages while coverage is live) ─── */

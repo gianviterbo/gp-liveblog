@@ -175,4 +175,51 @@
   /* self-refresh every 15s */
   load();
   setInterval(load, 15000);
+
+  /* ── analytics + pinned video (v0.2.0) ── */
+  var statsEl = document.getElementById('gplbAdminStats');
+  function fmt(n) { return Number(n || 0).toLocaleString(); }
+  function loadStats() {
+    if (!statsEl) return;
+    fetch(REST + '/liveblogs/' + lbId + '/stats')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || typeof d !== 'object' || d.viewers === undefined) return;
+        statsEl.innerHTML =
+          '<span>👁 <b>' + fmt(d.viewers) + '</b> viewers</span>' +
+          '<span class="' + (d.live ? '' : 'is-dim') + '">● <b>' + fmt(d.watching) + '</b> now</span>' +
+          '<span>⚡ <b>' + fmt(d.peak) + '</b> peak</span>' +
+          '<span>❤ <b>' + fmt(d.reactions) + '</b> reactions</span>' +
+          '<span>✍ <b>' + fmt(d.entries) + '</b> updates</span>';
+      })
+      .catch(function () {});
+  }
+  var videoUrlEl = document.getElementById('gplbAdminVideoUrl');
+  var videoStatusEl = document.getElementById('gplbAdminVideoStatus');
+  function videoStatus(msg, err) {
+    if (!videoStatusEl) return;
+    videoStatusEl.textContent = msg || '';
+    videoStatusEl.classList.toggle('is-err', !!err);
+    if (msg) setTimeout(function () { videoStatusEl.textContent = ''; }, 4000);
+  }
+  function videoPost(url) {
+    return fetch(REST + '/liveblogs/' + lbId + '/video', {
+      method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify({ url: url })
+    }).then(function (r) { return r.json(); });
+  }
+  var videoPinBtn = document.getElementById('gplbAdminVideoPin');
+  if (videoPinBtn) videoPinBtn.addEventListener('click', function () {
+    var u = (videoUrlEl.value || '').trim();
+    if (!u) { videoStatus('Paste a YouTube/TikTok/IG link', true); return; }
+    videoPost(u).then(function (d) {
+      if (d && d.ok) { videoUrlEl.value = ''; videoStatus(d.pinned ? 'Video pinned ✓' : 'Failed', !d.pinned); }
+      else videoStatus((d && d.message) || 'Not supported', true);
+    }).catch(function () { videoStatus('Network error', true); });
+  });
+  var videoClearBtn = document.getElementById('gplbAdminVideoClear');
+  if (videoClearBtn) videoClearBtn.addEventListener('click', function () {
+    videoPost('').then(function (d) { if (d && d.ok) videoStatus('Video removed'); }).catch(function () { videoStatus('Network error', true); });
+  });
+  loadStats();
+  setInterval(loadStats, 30000);
 })();

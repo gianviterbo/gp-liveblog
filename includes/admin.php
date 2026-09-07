@@ -107,6 +107,16 @@ function gplb_admin_room() {
 						</div>
 					</div>
 
+					<div class="gplb-admin-extras">
+						<div class="gplb-admin-video">
+							<input type="url" id="gplbAdminVideoUrl" placeholder="🎥 Pin video above the updates — YouTube/TikTok/IG URL">
+							<button type="button" class="button" id="gplbAdminVideoPin"><?php esc_html_e( 'Set video', 'gp-liveblog' ); ?></button>
+							<button type="button" class="button" id="gplbAdminVideoClear"><?php esc_html_e( 'Remove', 'gp-liveblog' ); ?></button>
+							<span class="gplb-status" id="gplbAdminVideoStatus" role="status"></span>
+						</div>
+						<div class="gplb-admin-stats" id="gplbAdminStats"><em><?php esc_html_e( 'Stats loading…', 'gp-liveblog' ); ?></em></div>
+					</div>
+
 					<div class="gplb-admin-table" id="gplbAdminTable" data-id="<?php echo (int) $current; ?>">
 						<div class="gplb-admin-row gplb-admin-head">
 							<span><?php esc_html_e( 'Time', 'gp-liveblog' ); ?></span><span><?php esc_html_e( 'Entry', 'gp-liveblog' ); ?></span><span><?php esc_html_e( 'Author', 'gp-liveblog' ); ?></span><span><?php esc_html_e( 'Type', 'gp-liveblog' ); ?></span><span><?php esc_html_e( 'Actions', 'gp-liveblog' ); ?></span>
