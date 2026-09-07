@@ -1,0 +1,7 @@
+# workspace artifacts — not part of the plugin deliverable
+/build/
+/rollback/
+/sketches/
+/*.zip
+__pycache__/
+*.pyc
