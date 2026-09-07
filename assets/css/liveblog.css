@@ -311,10 +311,13 @@ body:not(.gplb-canpost) .gplb-composer { display: none !important; }
 .gplb-videorow input { flex: 1 1 220px; width: auto; background: var(--gplb-bg); border: 1px solid var(--gplb-line); color: var(--gplb-fg); border-radius: 10px; padding: 7px 12px; font: inherit; font-size: 13px; font-family: var(--gplb-font-body); }
 .gplb-videorow input:focus { outline: none; border-color: var(--gplb-accent); }
 
-/* ═══ Special Coverage card: LIVE COVERAGE beside the CTA (v0.2.0) ═══ */
+/* ═══ Special Coverage card: LIVE COVERAGE beside the CTA (v0.2.2) ═══ */
+.gp-coverage-card .cov-cta { margin: 0; }
 .gp-coverage-card .gplb-coverage-btn {
-  margin-left: 8px; vertical-align: middle;
-  padding: 6px 12px 6px 13px; font-size: 12px; border-radius: 9px; gap: 6px;
+  display: inline-flex; vertical-align: middle;
+  margin: 0 0 0 8px;
+  padding: 7px 12px 7px 13px; font-size: 12.5px; line-height: 1.5;
+  border-radius: 9px; gap: 6px;
 }
 .gp-coverage-card .gplb-coverage-btn .gplb-live-dot { width: 7px; height: 7px; }
 @media (max-width: 420px) {

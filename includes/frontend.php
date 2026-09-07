@@ -306,8 +306,9 @@ function gplb_liveblog_choices() {
 /** Render the generate-button "LIVE COVERAGE" anchor (card + anywhere). */
 function gplb_render_coverage_button( $liveblog_id, $url, $label = '' ) {
 	$label = $label ? $label : __( 'LIVE COVERAGE', 'gp-liveblog' );
+	// No inline styles: CSS (gp-coverage-card scope) sizes it beside the CTA.
 	return sprintf(
-		'<a class="gplb-embed-toggle gplb-coverage-btn" href="%s" style="margin-top:12px;text-decoration:none;font-size:13px"><span class="gplb-live-dot"></span><span class="gplb-embed-label">%s</span><span aria-hidden="true">↗</span></a>',
+		'<a class="gplb-embed-toggle gplb-coverage-btn" href="%s"><span class="gplb-live-dot"></span><span class="gplb-embed-label">%s</span><span aria-hidden="true">↗</span></a>',
 		esc_url( $url ),
 		esc_html( $label )
 	);

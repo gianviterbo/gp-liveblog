@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GP Liveblog
  * Description: Real-time live coverage for launches & press events — team-authored entries (text, WebP images, link cards, social embeds, private team notes), auto-updating viewer feed, floating LIVE panel, collapsible embeds, LiveBlogPosting schema. Editors post from wp-admin control room or a frontend overlay; Admin owns liveblog lifecycle.
- * Version: 0.2.0
+ * Version: 0.2.2
  * Author: Gadget Pilipinas
  * Text Domain: gp-liveblog
  *
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GPLB_VERSION', '0.2.0' );
+define( 'GPLB_VERSION', '0.2.2' );
 define( 'GPLB_FILE', __FILE__ );
 define( 'GPLB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPLB_URL', plugin_dir_url( __FILE__ ) );

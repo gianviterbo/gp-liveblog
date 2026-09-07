@@ -569,25 +569,27 @@
     if (!window.gplbCoverage) return;
     var c = window.gplbCoverage;
     function inject() {
-      var card = document.querySelector('.gp-coverage-card .cov-body, .gp-coverage-card');
-      if (!card) return;
-      var existing = card.querySelector('.gplb-coverage-btn');
-      if (existing) return;
+      // The card's body may be filled by the theme AFTER DOMContentLoaded,
+      // so only treat a rendered .cov-cta as a valid anchor.
+      var body = document.querySelector('.gp-coverage-card .cov-body');
+      if (!body) return false;
+      var cta = body.querySelector('.cov-cta');
+      if (!cta) return false;
+      if (body.querySelector('.gplb-coverage-btn')) return true; // already there (server hook / earlier run)
       var a = document.createElement('a');
       a.className = 'gplb-coverage-btn gplb-embed-toggle';
       a.href = c.url;
       a.innerHTML = '<span class="gplb-live-dot"></span><span class="gplb-embed-label">LIVE COVERAGE</span><span aria-hidden="true">↗</span>';
-      // sit inline right beside the card's CTA (same row, same height via CSS)
-      var cta = card.querySelector('.cov-cta');
-      if (cta && cta.parentNode === card) {
-        cta.parentNode.insertBefore(a, cta.nextSibling);
-      } else {
-        card.appendChild(a);
-      }
+      // inline, right beside the CTA — same row, same height via CSS
+      cta.parentNode.insertBefore(a, cta.nextSibling);
+      return true;
     }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', inject);
-    } else { inject(); }
+    if (inject()) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      if (inject() || tries > 20) { clearInterval(timer); } // ~10s of retries
+    }, 500);
   }
 
   document.addEventListener('DOMContentLoaded', function () {

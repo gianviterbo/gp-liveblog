@@ -148,6 +148,38 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
 - Rollback artifact: `rollback/gp-liveblog-0.1.4` + `gp-liveblog-0.1.4-rollback.zip`.
 - PENDING: gp-base v1.24 theme deploy (awaiting go).
 
+## v0.2.1 + v0.2.2 + gp-base v1.24/1.25 — coverage button inline + image repair (2026-09-07 PH, Apple event LIVE)
+- **gp-base v1.24 DEPLOYED** (Gian: "Proceed") — server-side LIVE COVERAGE button now
+  renders in the card HTML (hook in inc/coverage.php). Theme deploys via MCP
+  `hosting_deployWordpressTheme`; raw api.hostinger.com was Cloudflare-530 all day
+  (deploy_theme.py unusable; MCP files API unaffected). activate:true required —
+  without it the upload dir is discarded unswapped.
+- **v0.2.1** — bridge fix: coverage card body can render AFTER DOMContentLoaded
+  (theme lazy panel) → inject() now retries every 500ms ×20 instead of a single
+  pass; button is only ever placed directly after `.cov-cta` inside `.cov-body`
+  (never appended to card root). CSS forces `inline-flex` (the shared
+  `.gplb-embed-toggle{display:flex;margin:6px auto}` embed rule was making the
+  coverage pill full-width block).
+- **v0.2.2** — removed legacy inline `style="margin-top:12px;..."` from
+  `gplb_render_coverage_button()`; pill padding/line-height matched to the CTA
+  (34px ↔ 35px). Browser-verified on prod home: button inline beside "Browse the
+  category →" (11px gap, same row, correct height) — screenshot in session.
+- **gp-base v1.25** — render-time legacy-image repair: `the_content` filter
+  rewrites own-domain `/wp-content/uploads/*.jpg` refs to their `.webp` twins
+  when the file exists (file_exists + 24h transient). Fixes the April 2026
+  "iPhone 18 design leak" article (and any other pre-WebP-migration post) whose
+  sources were deleted by the 49 GB conversion. Editorial images verified 200.
+  Commit d6ac52d.
+- **NOT fixed (needs admin):** Hostinger referral ad creative #212019
+  (`Badge_dark_320×120.png`, Advanced Ads, rail slot on the leak article) has a
+  stray space in its stored filename → 404. File exists without the space.
+  Fix when autologin resets: Advanced Ads → edit ad → clean the image URL (or
+  re-insert from media). Do NOT rename the file (other creatives may use the
+  clean URL).
+- Live state: plugin 0.2.2 + theme 1.25 on prod; Apple event live throughout.
+- Rollback artifacts: `gp-liveblog-0.2.1.zip` (previous), new
+  `gp-liveblog-0.2.2.zip`; theme rollback = git tag/commit d6ac52d parent 83656ae.
+
 ## Production verification (all passed)
 - Plugin active: `gp-liveblog/gp-liveblog` v0.1.1 (single registration, no stale dirs)
 - REST namespace `/gp-liveblog/v1/liveblogs` responds, `[]` when idle
