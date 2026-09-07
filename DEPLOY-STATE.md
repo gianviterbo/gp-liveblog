@@ -113,6 +113,41 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
 - Docs: theme-integration/coverage-card-hook.patch.md marked shipped in v1.24.
 - Rollback artifact: `rollback/gp-liveblog-0.1.3` + `gp-liveblog-0.1.3-rollback.zip`.
 
+## v0.2.0 — reactions, analytics, media previews, pinned video (built, NOT deployed)
+- **Reactions** per entry (live page + embeds): 👍😊😂😢👎🤔😡 — one per
+  visitor (localStorage id, switchable/removable), counts everywhere; tables
+  `gplb_reactions` (+`gplb_viewers`) auto-created on version bump.
+- **Insights:** unique total viewers (visitor-tagged watch beats + rolling
+  peak), reaction totals; public stats chips on live page (👁/now/⚡/❤/✍,
+  30s poll) + stats row in control room; REST `GET /liveblogs/{id}/stats`.
+- **Media previews:** YT/TikTok/IG links → oEmbed card (thumb/title/author,
+  1h cache); YouTube plays inline on click. Fixed `v=` query regex.
+- **Pinned video** above the updates: set from live-page composer ("🎥 Pin
+  video") or control room; REST `POST /liveblogs/{id}/video`; viewers sync
+  via entries poll (≤20s). YT-nocookie/TikTok/IG embeds.
+- **Coverage card:** JS bridge now inserts LIVE COVERAGE inline after the
+  CTA; CSS matches height/compact (`.gp-coverage-card .gplb-coverage-btn`).
+- Harness E2E passed: tables, unique viewers (2 visitors → 2, repeat stays),
+  reaction switch/remove/dedupe, stats endpoint, real YT oEmbed (title+img),
+  pin/unpin, page chips + footers + media card + iframe render (screenshot in
+  session). GitHub `main` @ 42187d5.
+- Rollback artifact: `rollback/gp-liveblog-0.1.4` + `gp-liveblog-0.1.4-rollback.zip`
+  (git archive of 7c3f157). Zip: `gp-liveblog-0.2.0.zip`.
+- PENDING (unrelated): gp-base v1.24 theme deploy (built, awaiting go).
+
+## v0.2.0 — reactions, analytics, media previews, pinned video — DEPLOYED 2026-09-07 (PH)
+- Deploy: upload 10/10 → `gp-liveblog-mUBjEOe4`; status success; canonical
+  serves `liveblog.js/css?ver=0.2.0` (fresh origin render 16:29). Ended-page
+  render verified: 5 stats chips, reaction footers on entries, no pinned,
+  float 0. `GET /liveblogs/212334/stats` OK; tables auto-created on bump.
+- **NOTE: prod Apple "Surprise and Shine" event went LIVE ~16:30 PH right as
+  this deployed** — stats now accrue for real (watching 5+; viewers/reactions
+  totals start from deploy moment; old 0.1.4-era watchers count once their
+  browsers reload the new JS). Bunny per-PoP staleness ≤ TTL; snippet #69
+  (purge on publish) keeps the live page fresh.
+- Rollback artifact: `rollback/gp-liveblog-0.1.4` + `gp-liveblog-0.1.4-rollback.zip`.
+- PENDING: gp-base v1.24 theme deploy (awaiting go).
+
 ## Production verification (all passed)
 - Plugin active: `gp-liveblog/gp-liveblog` v0.1.1 (single registration, no stale dirs)
 - REST namespace `/gp-liveblog/v1/liveblogs` responds, `[]` when idle
