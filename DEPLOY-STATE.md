@@ -146,7 +146,10 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
   → rides next gp-base release.
 
 ## Source of truth
-- Build: `/data/workspace/gp-liveblog/build/gp-liveblog/`
+- **GitHub:** `gianviterbo/gp-liveblog` (main) — repo ROOT is canonical plugin
+  source (gp-liveblog.php at root). Workflow: edit repo root → `cp -r` changed
+  files to `build/gp-liveblog/` → deploy from build dir.
+- Build/deploy dir: `/data/workspace/gp-liveblog/build/gp-liveblog/`
 - Zip: `/data/workspace/gp-liveblog/gp-liveblog-0.1.4.zip` (current)
 - Rollbacks (dir + zip each): `rollback/gp-liveblog/` = 0.1.1+hotfix;
   `rollback/gp-liveblog-0.1.2/`, `rollback/gp-liveblog-0.1.3/`; zips
