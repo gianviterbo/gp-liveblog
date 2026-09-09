@@ -137,9 +137,11 @@
     });
   }
   function initThreads() {
-    if (!cfg.canPost) return;
+    // Runs for EVERYONE: viewers need the Reply flow on public-enabled
+    // updates; only the public-replies TOGGLE is staff-gated (below).
     document.addEventListener('click', function (ev) {
-      var pubBtn = ev.target && ev.target.closest ? ev.target.closest('.gplb-pub-toggle') : null;
+      var staff = !!cfg.canPost;
+      var pubBtn = (staff && ev.target && ev.target.closest) ? ev.target.closest('.gplb-pub-toggle') : null;
       if (pubBtn) {
         var peid = parseInt(pubBtn.getAttribute('data-entry'), 10) || 0;
         var on = pubBtn.getAttribute('data-on') !== '1';
@@ -718,6 +720,12 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    // Viewers must NEVER see composer UI — belt & braces on top of server
+    // gating (kills any stale cached editor variant).
+    if (!cfg.canPost) {
+      document.querySelectorAll('.gplb-composer').forEach(function (el) { el.remove(); });
+      document.body.classList.remove('gplb-canpost');
+    }
     initLivePage();
     initLiveComposer();
     initFloat();

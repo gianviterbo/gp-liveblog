@@ -302,3 +302,14 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
 - CSS for reply sub-rows; admin.js data-raw attr added so Edit prompts start
   from the real text.
 - Zip: gp-liveblog-0.2.7.zip (rollback 0.2.6 = gp-liveblog-0.2.6.zip).
+
+## v0.2.8 — composer visibility hardening + public-replies wiring fix
+- BUG: threaded public replies did nothing for logged-out viewers — initThreads()
+  early-returned when !cfg.canPost, so Reply clicks on public-enabled updates
+  were never bound. Now initThreads runs for everyone; only the 🌏 toggle is
+  staff-gated.
+- BUG: composer UI visible to logged-out users in edge cases (stale cached
+  editor page variants). Viewers now get a defensive JS pass that removes any
+  .gplb-composer from the DOM + drops gplb-canpost (server already gates markup;
+  this kills stale cache copies deterministically).
+- Zip: gp-liveblog-0.2.8.zip (rollback 0.2.7 = gp-liveblog-0.2.7.zip).
