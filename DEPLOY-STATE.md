@@ -242,3 +242,17 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
   locked → ended ✓.
 - Zip: `gp-liveblog-0.2.3.zip` (rollback = `gp-liveblog-0.2.2.zip`).
 - GitHub main @ 26c0bb6.
+
+## v0.2.4 — SEO full transcript + state endpoint (built; deploy pending go)
+- Ended liveblog pages now server-render the FULL public transcript (gplb_all_entries,
+  paged, cap 2000, notes excluded) instead of the 40-entry cap → crawlers see every
+  discussion. Live pages unchanged (40 + JS streaming).
+- New admin REST GET /liveblogs/{id}/state → {live, locked, status, watching,
+  entries_total, started_ph, ended_ph} (drives the event-watch cron).
+- Cron: "GP Apple Sept 2026 recap (auto)" 650fff87ebbb — every 5m; monitor
+  gplb_event_watch.py (output changes when session ends/unlocks or ≥03:00 PH) →
+  agent synthesizes liveblog entries ≥ 01:00 PH 2026-09-10 into a WP DRAFT
+  (author 11), idempotent via title marker. First tick = baseline.
+- Harness-verified: all_entries=45 vs live cap 40; ended page HTML contains 45/45
+  markers; "Coverage ended" state intact.
+- Zip: gp-liveblog-0.2.4.zip (rollback 0.2.3 = gp-liveblog-0.2.3.zip).

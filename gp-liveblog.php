@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GP Liveblog
  * Description: Real-time live coverage for launches & press events — team-authored entries (text, WebP images, link cards, social embeds, private team notes), auto-updating viewer feed, floating LIVE panel, collapsible embeds, LiveBlogPosting schema. Editors post from wp-admin control room or a frontend overlay; Admin owns liveblog lifecycle.
- * Version: 0.2.3
+ * Version: 0.2.4
  * Author: Gadget Pilipinas
  * Text Domain: gp-liveblog
  *
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GPLB_VERSION', '0.2.3' );
+define( 'GPLB_VERSION', '0.2.4' );
 define( 'GPLB_FILE', __FILE__ );
 define( 'GPLB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPLB_URL', plugin_dir_url( __FILE__ ) );
@@ -468,6 +468,49 @@ function gplb_get_entries( $liveblog_id, $after_id = 0, $limit = 60, $include_no
 	foreach ( $out as $i => $shape ) {
 		$out[ $i ]['reactions']       = $react[ $shape['id'] ]['map'] ?? array_fill_keys( array_keys( gplb_reactions() ), 0 );
 		$out[ $i ]['reactions_total'] = $react[ $shape['id'] ]['total'] ?? 0;
+	}
+	return $out;
+}
+
+/** All entries, paged (SEO full transcript on ended pages; notes excluded by
+ *  caller). Newest-first, same shape as gplb_get_entries(). Hard-capped. */
+function gplb_all_entries( $liveblog_id, $include_notes = false, $cap = 2000 ) {
+	$ids   = array();
+	$seen  = 0;
+	$per   = 400;
+	$off   = 0;
+	while ( $seen < $cap ) {
+		$q = new WP_Query( array(
+			'post_type'      => 'gp_liveblog_entry',
+			'post_status'    => 'publish',
+			'post_parent'    => (int) $liveblog_id,
+			'posts_per_page' => $per,
+			'offset'         => $off,
+			'no_found_rows'  => true,
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+		) );
+		if ( ! $q->have_posts() ) { break; }
+		foreach ( $q->posts as $e ) {
+			$type = get_post_meta( $e->ID, '_gplb_type', true ) ?: 'update';
+			if ( 'note' === $type && ! $include_notes ) { continue; }
+			$ids[] = (int) $e->ID;
+			if ( ++$seen >= $cap ) { break 2; }
+		}
+		$off += $per;
+		if ( $q->post_count < $per ) { break; }
+	}
+	if ( ! $ids ) { return array(); }
+	$react = gplb_reactions_for( $ids );
+	$out   = array();
+	foreach ( $ids as $eid ) {
+		$e = get_post( $eid );
+		if ( ! $e ) { continue; }
+		$type  = get_post_meta( $eid, '_gplb_type', true ) ?: 'update';
+		$shape = gplb_entry_shape( $e, $type );
+		$shape['reactions']       = $react[ $shape['id'] ]['map'] ?? array_fill_keys( array_keys( gplb_reactions() ), 0 );
+		$shape['reactions_total'] = $react[ $shape['id'] ]['total'] ?? 0;
+		$out[] = $shape;
 	}
 	return $out;
 }

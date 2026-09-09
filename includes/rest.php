@@ -172,6 +172,33 @@ function gplb_rest() {
 		},
 	) );
 
+	/* ── State (admin only): status/lock/watch for ops & the recap job ───── */
+	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\\d+)/state', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () { return gplb_admin_can(); },
+		'callback'            => function ( $req ) {
+			global $wpdb;
+			$id = (int) $req['id'];
+			if ( 'gp_liveblog' !== get_post_type( $id ) ) {
+				return new WP_Error( 'gplb_not_found', __( 'Liveblog not found.', 'gp-liveblog' ), array( 'status' => 404 ) );
+			}
+			$started = (int) get_post_meta( $id, '_gplb_started', true );
+			$ended   = (int) get_post_meta( $id, '_gplb_ended', true );
+			return array(
+				'live'          => gplb_is_live( $id ),
+				'locked'        => gplb_is_locked( $id ),
+				'status'        => gplb_live_status( $id ),
+				'watching'      => (int) get_post_meta( $id, '_gplb_watching', true ) ?: 0,
+				'entries_total' => (int) $wpdb->get_var( $wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'gp_liveblog_entry' AND post_status = 'publish' AND post_parent = %d",
+					$id
+				) ),
+				'started_ph'    => $started ? gmdate( 'Y-m-d H:i:s', $started + 8 * 3600 ) : '',
+				'ended_ph'      => $ended ? gmdate( 'Y-m-d H:i:s', $ended + 8 * 3600 ) : '',
+			);
+		},
+	) );
+
 	/* ── Lifecycle (admin only): end / re-open / lock a liveblog ─────────── */
 	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\\d+)/(?P<action>end|start|lock|unlock)', array(
 		'methods'             => 'POST',

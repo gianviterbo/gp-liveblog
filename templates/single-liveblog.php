@@ -14,7 +14,11 @@ $gplb_id   = get_queried_object_id();
 $gplb_live = gplb_is_live( $gplb_id );
 $gplb_canpost = gplb_editor_can();
 $gplb_sub  = get_post_meta( $gplb_id, '_gplb_subtitle', true );
-$gplb_entries = gplb_get_entries( $gplb_id, 0, 40, gplb_editor_can() );
+// Live: newest 40 server-side (rest streams via JS). Ended: FULL transcript
+// in the HTML for SEO — every public entry, notes excluded.
+$gplb_entries = $gplb_live
+	? gplb_get_entries( $gplb_id, 0, 40, $gplb_canpost )
+	: gplb_all_entries( $gplb_id, false );
 
 $gplb_cats = get_the_terms( $gplb_id, 'category' );
 $gplb_cat_names = ( $gplb_cats && ! is_wp_error( $gplb_cats ) ) ? implode( ' · ', wp_list_pluck( $gplb_cats, 'name' ) ) : '';
