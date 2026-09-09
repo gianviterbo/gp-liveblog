@@ -56,11 +56,17 @@ function gplb_rest() {
 				return new WP_Error( 'gplb_not_found', __( 'Liveblog not found.', 'gp-liveblog' ), array( 'status' => 404 ) );
 			}
 			$include_notes = gplb_editor_can();
-			return array(
-				'live'      => gplb_is_live( $id ),
-				'pinned'    => gplb_pinned_video( $id ),
-				'entries'   => gplb_get_entries( $id, (int) $req->get_param( 'after_id' ), 80, $include_notes ),
+			$entries       = gplb_get_entries( $id, (int) $req->get_param( 'after_id' ), 80, $include_notes );
+			$out           = array(
+				'live'    => gplb_is_live( $id ),
+				'pinned'  => gplb_pinned_video( $id ),
+				'entries' => $entries,
 			);
+			// Threaded staff replies travel with the window (staff only).
+			if ( $include_notes && $entries ) {
+				$out['threads'] = gplb_threads_for( wp_list_pluck( $entries, 'id' ) );
+			}
+			return $out;
 		},
 	) );
 
@@ -73,10 +79,40 @@ function gplb_rest() {
 				return new WP_Error( 'gplb_not_live', __( 'Liveblog not found or not live.', 'gp-liveblog' ), array( 'status' => 400 ) );
 			}
 			$params = $req->get_json_params();
-			$type   = isset( $params['type'] ) && in_array( $params['type'], array_keys( gplb_entry_types() ), true ) ? $params['type'] : 'update';
+			$type   = isset( $params['type'] ) && in_array( $params['type'], array_merge( array_keys( gplb_entry_types() ), array( 'reply' ) ), true ) ? $params['type'] : 'update';
 			$text   = isset( $params['text'] ) ? sanitize_textarea_field( $params['text'] ) : '';
 			if ( ! $text && ! in_array( $type, array( 'image', 'link', 'social' ), true ) ) {
 				return new WP_Error( 'gplb_empty', __( 'Entry text is required.', 'gp-liveblog' ), array( 'status' => 400 ) );
+			}
+
+			// Threaded reply: nests under an existing entry (staff only, same cap).
+			$reply_to = (int) ( $params['reply_to'] ?? 0 );
+			if ( 'reply' === $type ) {
+				if ( ! gplb_editor_can() ) {
+					return new WP_Error( 'gplb_denied', __( 'Replies are staff-only.', 'gp-liveblog' ), array( 'status' => 403 ) );
+				}
+				$parent_entry = $reply_to ? get_post( $reply_to ) : null;
+				if ( ! $parent_entry || 'gp_liveblog_entry' !== $parent_entry->post_type || (int) $parent_entry->post_parent !== $id ) {
+					return new WP_Error( 'gplb_bad_reply_to', __( 'Reply target entry not found in this liveblog.', 'gp-liveblog' ), array( 'status' => 400 ) );
+				}
+				if ( 'reply' === get_post_meta( $parent_entry->ID, '_gplb_type', true ) ) {
+					return new WP_Error( 'gplb_bad_reply_to', __( 'Replies attach to updates, not other replies.', 'gp-liveblog' ), array( 'status' => 400 ) );
+				}
+				$rid = wp_insert_post( array(
+					'post_type'      => 'gp_liveblog_entry',
+					'post_status'    => 'publish',
+					'post_parent'    => $id,
+					'post_author'    => get_current_user_id(),
+					'post_title'     => wp_trim_words( wp_strip_all_tags( $text ), 12, '…' ),
+					'post_content'   => $text,
+					'post_date'      => wp_date( 'Y-m-d H:i:s' ),
+					'post_date_gmt'  => gmdate( 'Y-m-d H:i:s' ),
+				) );
+				if ( is_wp_error( $rid ) ) { return $rid; }
+				update_post_meta( $rid, '_gplb_type', 'reply' );
+				update_post_meta( $rid, '_gplb_reply_to', $parent_entry->ID );
+				update_post_meta( $id, '_gplb_last_entry', time() );
+				return array( 'ok' => true, 'reply' => gplb_entry_shape( get_post( $rid ), 'reply' ) );
 			}
 
 			$content = $text;
@@ -167,6 +203,16 @@ function gplb_rest() {
 		},
 		'callback'            => function ( $req ) {
 			$e = get_post( (int) $req['id'] );
+			// Cascade: deleting an update removes its threaded replies.
+			$kids = get_posts( array(
+				'post_type'      => 'gp_liveblog_entry',
+				'post_status'    => 'any',
+				'numberposts'    => -1,
+				'no_found_rows'  => true,
+				'meta_key'       => '_gplb_reply_to',
+				'meta_value'     => (int) $e->ID,
+			) );
+			foreach ( $kids as $k ) { wp_delete_post( $k->ID, true ); }
 			wp_delete_post( $e->ID, true );
 			return array( 'ok' => true, 'deleted' => (int) $e->ID );
 		},

@@ -93,6 +93,93 @@
   }
 
   /* ── reactions: one per visitor per entry; click toggles/switches ── */
+  /* ── threaded staff replies (v0.2.5) — visible to editors only ── */
+  function threadShellHtml(eid) {
+    return '<div class="gplb-thread" data-entry="' + eid + '"><div class="gplb-thread-list" data-sig=""></div><button type="button" class="gplb-reply-btn" data-entry="' + eid + '" title="Threaded staff reply"><span aria-hidden="true">💬</span> <span class="gplb-reply-label">Reply</span></button></div>';
+  }
+  function renderReplyHtml(r) {
+    return '<div class="gplb-reply" data-reply="' + r.id + '"><span class="gplb-reply-who">' + esc(r.author) + '</span><span class="gplb-reply-time">' + esc(r.ts_h) + '</span><div class="gplb-reply-body">' + (r.content || esc(r.raw)) + '</div></div>';
+  }
+  function ensureThreadShell(tl, eid) {
+    if (!tl || !cfg.canPost) return null;
+    var art = tl.querySelector('.gplb-entry[data-id="' + eid + '"]');
+    if (!art) return null;
+    var shell = tl.querySelector('.gplb-thread[data-entry="' + eid + '"]');
+    if (!shell) {
+      art.insertAdjacentHTML('afterend', threadShellHtml(eid));
+      shell = art.nextElementSibling;
+    }
+    return shell;
+  }
+  function applyThreads(tl, threads) {
+    if (!tl || !threads || !cfg.canPost) return;
+    Object.keys(threads).forEach(function (eidStr) {
+      var eid = parseInt(eidStr, 10);
+      if (!eid) return;
+      var shell = ensureThreadShell(tl, eid);
+      if (!shell) return;
+      var list = shell.querySelector('.gplb-thread-list');
+      if (!list) return;
+      var reps = threads[eidStr] || [];
+      var sig = reps.map(function (r) { return r.id; }).join(',');
+      if (list.getAttribute('data-sig') === sig) return;
+      var html = '';
+      reps.forEach(function (r) { html += renderReplyHtml(r); });
+      list.innerHTML = html;
+      list.setAttribute('data-sig', sig);
+    });
+  }
+  function initThreads() {
+    if (!cfg.canPost) return;
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.gplb-reply-btn') : null;
+      if (!btn) return;
+      var shell = btn.closest('.gplb-thread');
+      if (!shell) return;
+      var old = shell.querySelector('.gplb-reply-box');
+      if (old) { old.remove(); return; }
+      var eid = parseInt(btn.getAttribute('data-entry'), 10) || 0;
+      var box = document.createElement('div');
+      box.className = 'gplb-reply-box';
+      box.innerHTML = '<textarea rows="2" placeholder="Reply to this update…"></textarea><div class="gplb-reply-actions"><button type="button" class="gplb-btn gplb-btn-primary gplb-reply-send">Reply</button> <button type="button" class="gplb-reply-cancel">Cancel</button> <span class="gplb-status gplb-reply-status" role="status"></span></div>';
+      shell.insertBefore(box, btn);
+      var ta = box.querySelector('textarea');
+      ta.focus();
+      var setStat = function (m, err) {
+        var s = box.querySelector('.gplb-reply-status');
+        if (s) { s.textContent = m || ''; s.classList.toggle('is-err', !!err); }
+      };
+      box.querySelector('.gplb-reply-cancel').addEventListener('click', function () { box.remove(); });
+      var send = function () {
+        var text = ta.value.trim();
+        if (!text) { setStat('Type a reply', true); return; }
+        var sendBtn = box.querySelector('.gplb-reply-send');
+        sendBtn.disabled = true;
+        setStat('Sending…', false);
+        fetch(REST + '/liveblogs/' + currentLbId() + '/entries', {
+          method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+          body: JSON.stringify({ type: 'reply', reply_to: eid, text: text })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            sendBtn.disabled = false;
+            if (d && d.ok && d.reply) {
+              var list = shell.querySelector('.gplb-thread-list');
+              var sig = list.getAttribute('data-sig') || '';
+              list.insertAdjacentHTML('beforeend', renderReplyHtml(d.reply));
+              list.setAttribute('data-sig', sig ? sig + ',' + d.reply.id : String(d.reply.id));
+              box.remove();
+            } else { setStat((d && d.message) || 'Failed', true); }
+          })
+          .catch(function () { sendBtn.disabled = false; setStat('Network error', true); });
+      };
+      box.querySelector('.gplb-reply-send').addEventListener('click', send);
+      ta.addEventListener('keydown', function (ev) {
+        if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') send();
+      });
+    });
+  }
+
   function bindReactions(root) {
     var footers = (root && root.querySelectorAll) ? root.querySelectorAll('.gplb-react') : [];
     footers.forEach(function (foot) {
@@ -274,6 +361,12 @@
         if (empty) empty.remove();
         target.insertBefore(frag, target.firstChild);
         bindReactions(target);
+        if (isLivePage && cfg.canPost) {
+          fresh.forEach(function (e) {
+            if (e.type !== 'note' && e.type !== 'reply') ensureThreadShell(target, e.id);
+          });
+          applyThreads(target, d.threads || {});
+        }
         if (isLivePage && d.pinned !== undefined) applyPinned(d.pinned);
         if (isLivePage && d.live === false) document.body.classList.add('gplb-ended');
       })
@@ -602,5 +695,6 @@
     initMediaPlay();
     initStatsPoll();
     initVideoPin();
+    initThreads();
   });
 })();

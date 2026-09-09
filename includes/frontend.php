@@ -149,6 +149,22 @@ function gplb_render_entry( $e ) {
 	);
 }
 
+/** Thread shell for an entry (staff-only UI). Rendered by the template after
+ *  each entry; JS keeps it in sync on poll. */
+function gplb_render_reply( $r ) {
+	return '<div class="gplb-reply" data-reply="' . (int) $r['id'] . '">'
+		. '<span class="gplb-reply-who">' . esc_html( $r['author'] ) . '</span>'
+		. '<span class="gplb-reply-time">' . esc_html( $r['ts_h'] ) . '</span>'
+		. '<div class="gplb-reply-body">' . wp_kses_post( $r['content'] ) . '</div></div>';
+}
+
+function gplb_render_thread( $entry_id, $replies = array() ) {
+	$html = '<div class="gplb-thread" data-entry="' . (int) $entry_id . '"><div class="gplb-thread-list" data-sig="">';
+	foreach ( (array) $replies as $r ) { $html .= gplb_render_reply( $r ); }
+	$html .= '</div><button type="button" class="gplb-reply-btn" data-entry="' . (int) $entry_id . '" title="' . esc_attr__( 'Threaded staff reply', 'gp-liveblog' ) . '">💬 <span class="gplb-reply-label">' . esc_html__( 'Reply', 'gp-liveblog' ) . '</span></button></div>';
+	return $html;
+}
+
 function gplb_render_link_card( $card, $url, $type = 'link', $media = null ) {
 	// Rich media preview (YouTube/TikTok/Instagram) — thumbnail card that
 	// plays inline on click (YouTube) or opens the platform post.

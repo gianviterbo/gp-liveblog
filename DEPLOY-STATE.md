@@ -256,3 +256,21 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
 - Harness-verified: all_entries=45 vs live cap 40; ended page HTML contains 45/45
   markers; "Coverage ended" state intact.
 - Zip: gp-liveblog-0.2.4.zip (rollback 0.2.3 = gp-liveblog-0.2.3.zip).
+
+## v0.2.5 — threaded staff replies (deploy approved "even mid-event")
+- Staff-only nested replies under any update: 💬 Reply under each entry (live page
+  timeline, editors/admins only — same gating as 🔒 team notes; invisible to
+  viewers incl. SEO transcript).
+- Type 'reply' + meta _gplb_reply_to (parent ENTRY, depth 1). Excluded from main
+  feed everywhere (get_entries/all_entries); delivered as 'threads' map in the
+  entries REST response (editor auth only). POST /entries w/ {type:reply, reply_to}
+  validates target belongs to the liveblog + is not itself a reply. DELETE of an
+  update cascades to its replies.
+- Server-rendered thread shells (template, editor-only) + JS (ensureThreadShell/
+  applyThreads signature-diffed; inline compose box, Ctrl+Enter; reply buttons
+  delegated). CSS thread/reply styling.
+- Harness: public feed excludes replies; editor feed excludes replies from main
+  but threads_for returns them nested; reply_to shape; cascade leaves sibling
+  notes intact. REST-level harness check skipped (app-password auth broken in the
+  sqlite harness — prod REST auth proven); route code mirrors existing routes.
+- Zip: gp-liveblog-0.2.5.zip (rollback 0.2.4 = gp-liveblog-0.2.4.zip).

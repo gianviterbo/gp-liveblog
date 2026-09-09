@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GP Liveblog
  * Description: Real-time live coverage for launches & press events — team-authored entries (text, WebP images, link cards, social embeds, private team notes), auto-updating viewer feed, floating LIVE panel, collapsible embeds, LiveBlogPosting schema. Editors post from wp-admin control room or a frontend overlay; Admin owns liveblog lifecycle.
- * Version: 0.2.4
+ * Version: 0.2.5
  * Author: Gadget Pilipinas
  * Text Domain: gp-liveblog
  *
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GPLB_VERSION', '0.2.4' );
+define( 'GPLB_VERSION', '0.2.5' );
 define( 'GPLB_FILE', __FILE__ );
 define( 'GPLB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPLB_URL', plugin_dir_url( __FILE__ ) );
@@ -461,6 +461,7 @@ function gplb_get_entries( $liveblog_id, $after_id = 0, $limit = 60, $include_no
 		if ( $after_id && (int) $e->ID <= (int) $after_id ) { continue; }
 		$type = get_post_meta( $e->ID, '_gplb_type', true ) ?: 'update';
 		if ( 'note' === $type && ! $include_notes ) { continue; }
+		if ( 'reply' === $type ) { continue; } // Threaded replies — separate payload.
 		$out[] = gplb_entry_shape( $e, $type );
 		$ids[] = (int) $e->ID;
 	}
@@ -494,6 +495,7 @@ function gplb_all_entries( $liveblog_id, $include_notes = false, $cap = 2000 ) {
 		foreach ( $q->posts as $e ) {
 			$type = get_post_meta( $e->ID, '_gplb_type', true ) ?: 'update';
 			if ( 'note' === $type && ! $include_notes ) { continue; }
+			if ( 'reply' === $type ) { continue; } // Threaded replies — separate payload.
 			$ids[] = (int) $e->ID;
 			if ( ++$seen >= $cap ) { break 2; }
 		}
@@ -515,6 +517,30 @@ function gplb_all_entries( $liveblog_id, $include_notes = false, $cap = 2000 ) {
 	return $out;
 }
 
+/** Reply map for a set of entry ids: entry_id → [reply shapes, oldest first].
+ *  Internal (staff) only — callers gate on editor caps. */
+function gplb_threads_for( $entry_ids ) {
+	$entry_ids = array_values( array_filter( array_map( 'absint', (array) $entry_ids ) ) );
+	if ( ! $entry_ids ) { return array(); }
+	global $wpdb;
+	$ph  = implode( ',', array_fill( 0, count( $entry_ids ), '%d' ) );
+	$sql = "SELECT p.ID, pm.meta_value AS reply_to
+	        FROM {$wpdb->posts} p
+	        INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_gplb_reply_to'
+	        WHERE p.post_type = 'gp_liveblog_entry' AND p.post_status = 'publish'
+	          AND pm.meta_value IN ({$ph})
+	        ORDER BY p.post_date ASC, p.ID ASC";
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- placeholders built above.
+	$rows = $wpdb->get_results( $wpdb->prepare( $sql, $entry_ids ), ARRAY_A );
+	$map  = array();
+	foreach ( (array) $rows as $r ) {
+		$post = get_post( (int) $r['ID'] );
+		if ( ! $post ) { continue; }
+		$map[ (int) $r['reply_to'] ][] = gplb_entry_shape( $post, 'reply' );
+	}
+	return $map;
+}
+
 /** Render shape used by REST + server-side render. */
 function gplb_entry_shape( $e, $type = null ) {
 	$type = $type ?: ( get_post_meta( $e->ID, '_gplb_type', true ) ?: 'update' );
@@ -523,6 +549,7 @@ function gplb_entry_shape( $e, $type = null ) {
 	return array(
 		'id'        => (int) $e->ID,
 		'type'      => $type,
+		'reply_to'  => (int) get_post_meta( $e->ID, '_gplb_reply_to', true ),
 		'author'    => $author ? $author->display_name : __( 'GP Staff', 'gp-liveblog' ),
 		'author_id' => (int) $e->post_author,
 		'ts'        => get_the_date( 'c', $e->ID ),

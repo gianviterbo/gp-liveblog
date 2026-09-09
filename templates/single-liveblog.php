@@ -19,6 +19,7 @@ $gplb_sub  = get_post_meta( $gplb_id, '_gplb_subtitle', true );
 $gplb_entries = $gplb_live
 	? gplb_get_entries( $gplb_id, 0, 40, $gplb_canpost )
 	: gplb_all_entries( $gplb_id, false );
+$gplb_threads = $gplb_canpost ? gplb_threads_for( wp_list_pluck( $gplb_entries, 'id' ) ) : array();
 
 $gplb_cats = get_the_terms( $gplb_id, 'category' );
 $gplb_cat_names = ( $gplb_cats && ! is_wp_error( $gplb_cats ) ) ? implode( ' · ', wp_list_pluck( $gplb_cats, 'name' ) ) : '';
@@ -146,6 +147,9 @@ get_header();
 				<?php else : ?>
 					<?php foreach ( $gplb_entries as $gplb_e ) : ?>
 						<?php echo gplb_render_entry( $gplb_e ); // phpcs:ignore WordPress.Security.EscapeOutput -- sanitized in renderer ?>
+						<?php if ( $gplb_canpost && 'note' !== $gplb_e['type'] ) : ?>
+							<?php echo gplb_render_thread( $gplb_e['id'], $gplb_threads[ $gplb_e['id'] ] ?? array() ); // phpcs:ignore WordPress.Security.EscapeOutput -- sanitized in renderer ?>
+						<?php endif; ?>
 					<?php endforeach; ?>
 				<?php endif; ?>
 			</div>

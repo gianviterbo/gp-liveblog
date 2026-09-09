@@ -335,3 +335,23 @@ body:not(.gplb-canpost) .gplb-composer { display: none !important; }
 /* Control room: session-lock toggle + auto-end hint (v0.2.3) */
 .gplb-admin-hint { color: #6b7280; font-size: 12px; margin-left: 10px; vertical-align: middle; }
 .gplb-lock-on { border-color: #d97706 !important; color: #b45309 !important; }
+
+/* Threaded staff replies (v0.2.5) — nested discussion under updates */
+.gplb-thread { margin: 2px 0 12px 36px; padding-left: 12px; border-left: 2px solid var(--gplb-line); }
+.gplb-thread-list { display: flex; flex-direction: column; gap: 6px; }
+.gplb-reply { background: var(--gplb-soft); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.gplb-reply-who { font-weight: 700; color: var(--gplb-accent); margin-right: 6px; }
+.gplb-reply-who::after { content: ' · staff'; font-weight: 400; font-size: 10px; color: var(--gplb-muted); text-transform: uppercase; letter-spacing: .03em; }
+.gplb-reply-time { color: var(--gplb-muted); font-size: 11px; }
+.gplb-reply-body { margin-top: 2px; }
+.gplb-reply-body p { margin: 0 0 4px; }
+.gplb-reply-body p:last-child { margin-bottom: 0; }
+.gplb-reply-btn { background: none; border: 1px solid var(--gplb-line); border-radius: 999px; font-size: 12px; padding: 2px 10px; cursor: pointer; color: var(--gplb-fg); margin-top: 6px; opacity: .7; }
+.gplb-reply-btn:hover { opacity: 1; border-color: var(--gplb-accent); }
+.gplb-reply-box { margin-top: 8px; }
+.gplb-reply-box textarea { width: 100%; box-sizing: border-box; background: var(--gplb-bg); border: 1px solid var(--gplb-line); color: var(--gplb-fg); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; }
+.gplb-reply-box textarea:focus { outline: none; border-color: var(--gplb-accent); }
+.gplb-reply-actions { margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+.gplb-reply-actions .gplb-status { font-size: 12px; }
+.gplb-reply-actions .gplb-status.is-err { color: #e04444; }
+.gplb-reply-cancel { background: none; border: none; color: var(--gplb-muted); cursor: pointer; font-size: 13px; }
