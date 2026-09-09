@@ -238,9 +238,9 @@ function gplb_rest() {
 			if ( ! $e || 'gp_liveblog_entry' !== $e->post_type ) { return false; }
 			if ( gplb_admin_can() ) { return true; }
 			if ( gplb_editor_can() ) {
-				// Staff moderate threaded replies (incl. public viewer replies).
-				if ( 'reply' === ( get_post_meta( $e->ID, '_gplb_type', true ) ?: '' ) ) { return true; }
-				return (int) $e->post_author === get_current_user_id();
+				// Staff moderate everything from the control room: replies
+				// (incl. public viewer replies) AND any teammate's update/note.
+				return true;
 			}
 			return false;
 		},

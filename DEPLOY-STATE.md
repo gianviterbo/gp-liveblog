@@ -320,3 +320,11 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
   id forever, so the shell was never created (old/reloaded entries were fine).
   Now the composer creates the thread shell right after inserting the entry.
 - Zip: gp-liveblog-0.2.9.zip (rollback 0.2.8 = gp-liveblog-0.2.8.zip).
+
+## v0.2.10 — control-room delete for all staff (cross-author)
+- Bug: editors could not delete UPDATES posted by another teammate — DELETE was
+  owner-or-admin for updates (replies were already staff-wide since 0.2.7).
+  Gian hitting Delete on Emman/Luie posts → silent 401.
+- Now any editor/admin can delete ANY entry (update/note/reply) from the control
+  room; deleting an update still cascades to its thread.
+- Zip: gp-liveblog-0.2.10.zip (rollback 0.2.9 = gp-liveblog-0.2.9.zip).
