@@ -328,3 +328,12 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
 - Now any editor/admin can delete ANY entry (update/note/reply) from the control
   room; deleting an update still cascades to its thread.
 - Zip: gp-liveblog-0.2.10.zip (rollback 0.2.9 = gp-liveblog-0.2.9.zip).
+
+## v0.2.11 — stale-session self-heal (cookie check failed)
+- All REST calls in liveblog.js + admin.js now go through an api() wrapper:
+  on 403 with code rest_cookie_invalid_nonce the page reloads ONCE (guarded)
+  so a tab whose nonce went stale (re-login, session rotation, expiry) heals
+  itself instead of showing "cookie check failed".
+- Viewers never reload: heal only fires when cfg.canPost (front) — control
+  room is staff-only by construction.
+- Zip: gp-liveblog-0.2.11.zip (rollback 0.2.10 = gp-liveblog-0.2.10.zip).

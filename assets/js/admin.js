@@ -4,6 +4,25 @@
   if (!window.GPLB) return;
   var cfg = window.GPLB;
   var headers = { 'X-WP-Nonce': cfg.nonce };
+  var healDone = false;
+  /* Cookie-check 403 (stale nonce) -> reload once; the control room is
+     staff-only, so a 403 with code rest_cookie_invalid_nonce is always rot. */
+  function api(url, opts) {
+    opts = opts || {};
+    return api(url, opts).then(function (r) {
+      if (r.status === 403 && !healDone) {
+        return r.json().catch(function () { return {}; }).then(function (d) {
+          if (d.code === 'rest_cookie_invalid_nonce') {
+            healDone = true;
+            location.reload();
+            throw new Error('session refresh');
+          }
+          return r;
+        });
+      }
+      return r;
+    });
+  }
   var REST = cfg.rest;
 
   var main = document.querySelector('.gplb-admin-main');
@@ -66,7 +85,7 @@
     rowsEl.querySelectorAll('.gplb-del').forEach(function (b) {
       b.addEventListener('click', function () {
         if (!confirm('Delete this entry?')) return;
-        fetch(REST + '/entries/' + b.getAttribute('data-id'), { method: 'DELETE', headers: headers })
+        api(REST + '/entries/' + b.getAttribute('data-id'), { method: 'DELETE', headers: headers })
           .then(function (r) { return r.json(); })
           .then(function (d) { if (d.ok) load(); setStatus(d.ok ? 'Deleted ✓' : 'Failed', !d.ok); })
           .catch(function () { setStatus('Network error', true); });
@@ -79,7 +98,7 @@
         var cur = txtEl.getAttribute('data-raw') || txtEl.textContent.replace(/^🔒\s*/, '');
         var next = prompt('Edit entry text:', cur);
         if (next === null) return;
-        fetch(REST + '/entries/' + id, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify({ text: next }) })
+        api(REST + '/entries/' + id, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify({ text: next }) })
           .then(function (r) { return r.json(); })
           .then(function (d) { if (d.ok) load(); setStatus(d.ok ? 'Saved ✓' : 'Failed', !d.ok); })
           .catch(function () { setStatus('Network error', true); });
@@ -90,7 +109,7 @@
   function load() {
     if (!rowsEl) return;
     rowsEl.textContent = 'Loading…';
-    fetch(REST + '/liveblogs/' + lbId + '/entries?t=' + Date.now())
+    api(REST + '/liveblogs/' + lbId + '/entries?t=' + Date.now())
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d && d.entries) renderRows(d.entries, d.threads);
@@ -119,7 +138,7 @@
     var fd = new FormData();
     fd.append('file', f);
     setStatus('Uploading…');
-    fetch(REST + '/upload-image', { method: 'POST', headers: headers, body: fd })
+    api(REST + '/upload-image', { method: 'POST', headers: headers, body: fd })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d.attachment_id) { imgAtt = d.attachment_id; setStatus('Image ready ✓'); }
@@ -146,7 +165,7 @@
     var pubBtn = document.getElementById('gplbAdminPublish');
     pubBtn.disabled = true;
     setStatus('Publishing…');
-    fetch(REST + '/liveblogs/' + lbId + '/entries', {
+    api(REST + '/liveblogs/' + lbId + '/entries', {
       method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify(payload)
     })
       .then(function (r) { return r.json(); })
@@ -176,7 +195,7 @@
   if (lockBtn) lockBtn.addEventListener('click', function () {
     var action = lockBtn.getAttribute('data-locked') === '1' ? 'unlock' : 'lock';
     lockBtn.disabled = true;
-    fetch(REST + '/liveblogs/' + lockBtn.getAttribute('data-id') + '/' + action, { method: 'POST', headers: headers })
+    api(REST + '/liveblogs/' + lockBtn.getAttribute('data-id') + '/' + action, { method: 'POST', headers: headers })
       .then(function (r) { return r.json(); })
       .then(function (d) { if (d.ok) location.reload(); else { lockBtn.disabled = false; setStatus('Failed', true); } })
       .catch(function () { lockBtn.disabled = false; setStatus('Network error', true); });
@@ -185,14 +204,14 @@
   var endBtn = document.getElementById('gplbEndBtn');
   if (endBtn) endBtn.addEventListener('click', function () {
     if (!confirm('End this liveblog? Feed pauses; entries stay readable.')) return;
-    fetch(REST + '/liveblogs/' + endBtn.getAttribute('data-id') + '/end', { method: 'POST', headers: headers })
+    api(REST + '/liveblogs/' + endBtn.getAttribute('data-id') + '/end', { method: 'POST', headers: headers })
       .then(function (r) { return r.json(); })
       .then(function (d) { if (d.ok) location.reload(); else setStatus('Failed', true); })
       .catch(function () { setStatus('Network error', true); });
   });
   var startBtn = document.getElementById('gplbStartBtn');
   if (startBtn) startBtn.addEventListener('click', function () {
-    fetch(REST + '/liveblogs/' + startBtn.getAttribute('data-id') + '/start', { method: 'POST', headers: headers })
+    api(REST + '/liveblogs/' + startBtn.getAttribute('data-id') + '/start', { method: 'POST', headers: headers })
       .then(function (r) { return r.json(); })
       .then(function (d) { if (d.ok) location.reload(); else setStatus('Failed', true); })
       .catch(function () { setStatus('Network error', true); });
@@ -207,7 +226,7 @@
   function fmt(n) { return Number(n || 0).toLocaleString(); }
   function loadStats() {
     if (!statsEl) return;
-    fetch(REST + '/liveblogs/' + lbId + '/stats')
+    api(REST + '/liveblogs/' + lbId + '/stats')
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d || typeof d !== 'object' || d.viewers === undefined) return;
@@ -229,7 +248,7 @@
     if (msg) setTimeout(function () { videoStatusEl.textContent = ''; }, 4000);
   }
   function videoPost(url) {
-    return fetch(REST + '/liveblogs/' + lbId + '/video', {
+    return api(REST + '/liveblogs/' + lbId + '/video', {
       method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify({ url: url })
     }).then(function (r) { return r.json(); });
   }

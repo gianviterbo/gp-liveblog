@@ -12,6 +12,26 @@
   var i18n = cfg.i18n || {};
   var REST = cfg.rest;
   var headers = { 'X-WP-Nonce': cfg.nonce };
+  var healDone = false;
+  /* Wrapped fetch: on a stale-session 403 (cookie check failed) reload the
+     page ONCE so the tab picks up a fresh nonce. Viewers never reload —
+     their 403s are plain permission denials, not session rot. */
+  function api(url, opts) {
+    opts = opts || {};
+    return api(url, opts).then(function (r) {
+      if (r.status === 403 && cfg.canPost && !healDone) {
+        return r.json().catch(function () { return {}; }).then(function (d) {
+          if (d.code === 'rest_cookie_invalid_nonce') {
+            healDone = true;
+            location.reload();
+            throw new Error('session refresh');
+          }
+          return r;
+        });
+      }
+      return r;
+    });
+  }
   var since = {};     // liveblogId -> last seen entry id
   var active = cfg.active || [];
   var timer = null;
@@ -146,7 +166,7 @@
         var peid = parseInt(pubBtn.getAttribute('data-entry'), 10) || 0;
         var on = pubBtn.getAttribute('data-on') !== '1';
         pubBtn.disabled = true;
-        fetch(REST + '/entries/' + peid + '/public-replies', {
+        api(REST + '/entries/' + peid + '/public-replies', {
           method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
           body: JSON.stringify({ enabled: on })
         })
@@ -188,7 +208,7 @@
         var sendBtn = box.querySelector('.gplb-reply-send');
         sendBtn.disabled = true;
         setStat('Sending…', false);
-        fetch(REST + '/liveblogs/' + currentLbId() + '/entries', {
+        api(REST + '/liveblogs/' + currentLbId() + '/entries', {
           method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
           body: JSON.stringify({ type: 'reply', reply_to: eid, text: text })
         })
@@ -223,7 +243,7 @@
           var emoji = btn.getAttribute('data-emoji');
           var cur = ownReaction(eid);
           var remove = (cur === emoji);
-          fetch(REST + '/liveblogs/' + currentLbId() + '/entries/' + eid + '/reactions', {
+          api(REST + '/liveblogs/' + currentLbId() + '/entries/' + eid + '/reactions', {
             method: 'POST',
             headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
             body: JSON.stringify({ emoji: emoji, visitor: vid, remove: remove })
@@ -287,7 +307,7 @@
     var id = tl ? (parseInt(tl.getAttribute('data-id'), 10) || cfg.current || 0) : 0;
     if (!box || !id) return;
     function refresh() {
-      fetch(REST + '/liveblogs/' + id + '/stats')
+      api(REST + '/liveblogs/' + id + '/stats')
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (!d) return;
@@ -323,7 +343,7 @@
     if (rm) rm.addEventListener('click', function () { unpinVideo(); });
   }
   function pinVideo(url) {
-    return fetch(REST + '/liveblogs/' + currentLbId() + '/video', {
+    return api(REST + '/liveblogs/' + currentLbId() + '/video', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
       body: JSON.stringify({ url: url })
@@ -364,7 +384,7 @@
   /* ── timeline polling (live page + embed feed + panel share this) ── */
   function poll(lbId, feedEl, isLivePage) {
     var url = REST + '/liveblogs/' + lbId + '/entries?after_id=' + (since[lbId] || 0) + '&t=' + Date.now();
-    fetch(url)
+    api(url)
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d || !d.entries) return;
@@ -416,7 +436,7 @@
 
   function watchBeat(lbId) {
     if (!lbId) return;
-    fetch(REST + '/liveblogs/' + lbId + '/watch', {
+    api(REST + '/liveblogs/' + lbId + '/watch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ visitor: vid })
@@ -520,7 +540,7 @@
       var fd = new FormData();
       fd.append('file', f);
       setStatus('Uploading…', false);
-      fetch(REST + '/upload-image', { method: 'POST', headers: headers, body: fd })
+      api(REST + '/upload-image', { method: 'POST', headers: headers, body: fd })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d.attachment_id) {
@@ -558,7 +578,7 @@
       var btn2 = document.getElementById('gplbPublish');
       btn2.disabled = true;
       setStatus('Publishing…', false);
-      fetch(REST + '/liveblogs/' + currentLb.id + '/entries', {
+      api(REST + '/liveblogs/' + currentLb.id + '/entries', {
         method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify(payload)
       })
         .then(function (r) { return r.json(); })
@@ -623,7 +643,7 @@
       var fd = new FormData();
       fd.append('file', f);
       setStatus('Uploading…', false);
-      fetch(REST + '/upload-image', { method: 'POST', headers: headers, body: fd })
+      api(REST + '/upload-image', { method: 'POST', headers: headers, body: fd })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d.attachment_id) {
@@ -647,7 +667,7 @@
       }
       publish.disabled = true;
       setStatus('Publishing…', false);
-      fetch(REST + '/liveblogs/' + id + '/entries', {
+      api(REST + '/liveblogs/' + id + '/entries', {
         method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify(payload)
       })
         .then(function (r) { return r.json(); })
