@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GP Liveblog
  * Description: Real-time live coverage for launches & press events — team-authored entries (text, WebP images, link cards, social embeds, private team notes), auto-updating viewer feed, floating LIVE panel, collapsible embeds, LiveBlogPosting schema. Editors post from wp-admin control room or a frontend overlay; Admin owns liveblog lifecycle.
- * Version: 0.2.2
+ * Version: 0.2.3
  * Author: Gadget Pilipinas
  * Text Domain: gp-liveblog
  *
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GPLB_VERSION', '0.2.2' );
+define( 'GPLB_VERSION', '0.2.3' );
 define( 'GPLB_FILE', __FILE__ );
 define( 'GPLB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPLB_URL', plugin_dir_url( __FILE__ ) );
@@ -154,11 +154,28 @@ function gplb_entry_types() {
 function gplb_live_status( $liveblog_id ) {
 	return get_post_meta( $liveblog_id, '_gplb_status', true ) ?: 'ended';
 }
+/** Locked liveblogs stay live until an editor explicitly ends them. */
+function gplb_is_locked( $liveblog_id ) {
+	return '1' === (string) get_post_meta( $liveblog_id, '_gplb_locked', true );
+}
+function gplb_set_locked( $liveblog_id, $locked ) {
+	if ( $locked ) {
+		update_post_meta( $liveblog_id, '_gplb_locked', '1' );
+	} else {
+		delete_post_meta( $liveblog_id, '_gplb_locked' );
+		// Fresh idle window on unlock so the session does not die instantly
+		// from time spent locked.
+		update_post_meta( $liveblog_id, '_gplb_last_entry', time() );
+	}
+}
 function gplb_is_live( $liveblog_id ) {
 	$s = gplb_live_status( $liveblog_id );
 	if ( 'live' !== $s ) { return false; }
 	$started = (int) get_post_meta( $liveblog_id, '_gplb_started', true );
 	if ( ! $started ) { return false; }
+	// Locked sessions skip the idle auto-end entirely — they stay live until
+	// an editor presses "End event" (control room "Lock session" toggle).
+	if ( gplb_is_locked( $liveblog_id ) ) { return true; }
 	// Auto-end: 2h after last entry (configurable via filter).
 	$last = (int) get_post_meta( $liveblog_id, '_gplb_last_entry', true );
 	$ref  = $last ? $last : $started;

@@ -88,6 +88,22 @@ function gplb_admin_room() {
 							<?php else : ?>
 								<button class="button button-primary" type="button" id="gplbStartBtn" data-id="<?php echo (int) $current; ?>"><?php esc_html_e( 'Re-open live', 'gp-liveblog' ); ?></button>
 							<?php endif; ?>
+							<?php $gplb_locked = gplb_is_locked( $current ); ?>
+							<?php if ( gplb_is_live( $current ) || $gplb_locked ) : ?>
+								<button class="button<?php echo $gplb_locked ? ' button-primary gplb-lock-on' : ''; ?>" type="button" id="gplbLockBtn" data-id="<?php echo (int) $current; ?>" data-locked="<?php echo $gplb_locked ? '1' : '0'; ?>" title="<?php esc_attr_e( $gplb_locked ? 'Unlock — the idle auto-end applies again (2h without entries).' : 'Lock — keep live until you end it manually. Disables the idle auto-end.', 'gp-liveblog' ); ?>">
+									<?php echo $gplb_locked ? esc_html__( '🔒 Locked — stays live until ended', 'gp-liveblog' ) : esc_html__( '🔓 Lock session (no auto-stop)', 'gp-liveblog' ); ?>
+								</button>
+							<?php endif; ?>
+							<?php if ( gplb_is_live( $current ) ) : ?>
+								<?php
+								$gplb_ttl  = (int) apply_filters( 'gplb_auto_end_seconds', 2 * HOUR_IN_SECONDS, $current );
+								$gplb_last = (int) get_post_meta( $current, '_gplb_last_entry', true );
+								if ( ! $gplb_last ) { $gplb_last = (int) get_post_meta( $current, '_gplb_started', true ); }
+								?>
+								<span class="gplb-admin-hint"><?php echo $gplb_locked
+									? esc_html__( 'Auto-stop disabled (locked).', 'gp-liveblog' )
+									: esc_html( sprintf( __( 'Auto-ends around %s if no new entries. Entries posted extend it.', 'gp-liveblog' ), wp_date( 'H:i', $gplb_last + $gplb_ttl ) ) ); ?></span>
+							<?php endif; ?>
 						<?php endif; ?>
 					</p>
 

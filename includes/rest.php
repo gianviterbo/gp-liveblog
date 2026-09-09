@@ -172,8 +172,8 @@ function gplb_rest() {
 		},
 	) );
 
-	/* ── Lifecycle (admin only): end / re-open a liveblog ────────────────── */
-	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\d+)/(?P<action>end|start)', array(
+	/* ── Lifecycle (admin only): end / re-open / lock a liveblog ─────────── */
+	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\\d+)/(?P<action>end|start|lock|unlock)', array(
 		'methods'             => 'POST',
 		'permission_callback' => function () { return gplb_admin_can(); },
 		'callback'            => function ( $req ) {
@@ -183,11 +183,15 @@ function gplb_rest() {
 			}
 			if ( 'end' === $req['action'] ) {
 				gplb_end_liveblog( $id );
-			} else {
+			} elseif ( 'start' === $req['action'] ) {
 				gplb_start_liveblog( $id );
+			} elseif ( 'lock' === $req['action'] ) {
+				gplb_set_locked( $id, true );
+			} elseif ( 'unlock' === $req['action'] ) {
+				gplb_set_locked( $id, false );
 			}
 			// Bust the active-liveblog static cache.
-			return array( 'ok' => true, 'live' => gplb_is_live( $id ) );
+			return array( 'ok' => true, 'live' => gplb_is_live( $id ), 'locked' => gplb_is_locked( $id ) );
 		},
 	) );
 

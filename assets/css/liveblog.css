@@ -331,3 +331,7 @@ body:not(.gplb-canpost) .gplb-composer { display: none !important; }
 .gplb-admin-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; background: #fff; border: 1px solid #dcdcde; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: #50575e; font-variant-numeric: tabular-nums; }
 .gplb-admin-stats b { color: #1d2327; }
 .gplb-admin-stats .is-dim { color: #a7aaad; }
+
+/* Control room: session-lock toggle + auto-end hint (v0.2.3) */
+.gplb-admin-hint { color: #6b7280; font-size: 12px; margin-left: 10px; vertical-align: middle; }
+.gplb-lock-on { border-color: #d97706 !important; color: #b45309 !important; }

@@ -156,6 +156,16 @@
     });
   }
 
+  var lockBtn = document.getElementById('gplbLockBtn');
+  if (lockBtn) lockBtn.addEventListener('click', function () {
+    var action = lockBtn.getAttribute('data-locked') === '1' ? 'unlock' : 'lock';
+    lockBtn.disabled = true;
+    fetch(REST + '/liveblogs/' + lockBtn.getAttribute('data-id') + '/' + action, { method: 'POST', headers: headers })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (d.ok) location.reload(); else { lockBtn.disabled = false; setStatus('Failed', true); } })
+      .catch(function () { lockBtn.disabled = false; setStatus('Network error', true); });
+  });
+
   var endBtn = document.getElementById('gplbEndBtn');
   if (endBtn) endBtn.addEventListener('click', function () {
     if (!confirm('End this liveblog? Feed pauses; entries stay readable.')) return;
