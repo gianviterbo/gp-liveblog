@@ -62,9 +62,20 @@ function gplb_rest() {
 				'pinned'  => gplb_pinned_video( $id ),
 				'entries' => $entries,
 			);
-			// Threaded staff replies travel with the window (staff only).
-			if ( $include_notes && $entries ) {
-				$out['threads'] = gplb_threads_for( wp_list_pluck( $entries, 'id' ) );
+			// Threaded replies: staff see every thread; visitors only threads
+			// under updates the team explicitly opened for public replies.
+			if ( $entries ) {
+				$thread_ids = wp_list_pluck( $entries, 'id' );
+				if ( $include_notes ) {
+					$out['threads'] = gplb_threads_for( $thread_ids );
+				} else {
+					$pub = array_values( array_filter( $entries, function ( $e ) {
+						return ! empty( $e['public_replies'] );
+					} ) );
+					if ( $pub ) {
+						$out['threads'] = gplb_threads_for( wp_list_pluck( $pub, 'id' ) );
+					}
+				}
 			}
 			return $out;
 		},
@@ -72,7 +83,18 @@ function gplb_rest() {
 
 	register_rest_route( GPLB_REST, '/liveblogs/(?P<id>\d+)/entries', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () { return gplb_editor_can(); },
+		'permission_callback' => function ( $req ) {
+			if ( gplb_editor_can() ) { return true; }
+			// Anonymous viewers may only reply to updates the team opened for
+			// public replies (rate-limited in the callback).
+			$p  = $req->get_json_params();
+			$rt = (int) ( $p['reply_to'] ?? 0 );
+			if ( 'reply' === ( $p['type'] ?? '' ) && $rt ) {
+				$e = get_post( $rt );
+				return $e && 'gp_liveblog_entry' === $e->post_type && gplb_entry_public_replies( $rt );
+			}
+			return false;
+		},
 		'callback'            => function ( $req ) {
 			$id = (int) $req['id'];
 			if ( 'gp_liveblog' !== get_post_type( $id ) || ! gplb_is_live( $id ) ) {
@@ -85,32 +107,43 @@ function gplb_rest() {
 				return new WP_Error( 'gplb_empty', __( 'Entry text is required.', 'gp-liveblog' ), array( 'status' => 400 ) );
 			}
 
-			// Threaded reply: nests under an existing entry (staff only, same cap).
+			// Threaded reply: nests under an existing update. Staff may reply to
+			// anything; anonymous viewers only where the team enabled public replies.
 			$reply_to = (int) ( $params['reply_to'] ?? 0 );
 			if ( 'reply' === $type ) {
-				if ( ! gplb_editor_can() ) {
-					return new WP_Error( 'gplb_denied', __( 'Replies are staff-only.', 'gp-liveblog' ), array( 'status' => 403 ) );
-				}
+				$is_editor = gplb_editor_can();
 				$parent_entry = $reply_to ? get_post( $reply_to ) : null;
 				if ( ! $parent_entry || 'gp_liveblog_entry' !== $parent_entry->post_type || (int) $parent_entry->post_parent !== $id ) {
 					return new WP_Error( 'gplb_bad_reply_to', __( 'Reply target entry not found in this liveblog.', 'gp-liveblog' ), array( 'status' => 400 ) );
 				}
-				if ( 'reply' === get_post_meta( $parent_entry->ID, '_gplb_type', true ) ) {
-					return new WP_Error( 'gplb_bad_reply_to', __( 'Replies attach to updates, not other replies.', 'gp-liveblog' ), array( 'status' => 400 ) );
+				$pub_entry = gplb_entry_public_replies( $parent_entry->ID );
+				if ( ! $is_editor && ! $pub_entry ) {
+					return new WP_Error( 'gplb_denied', __( 'Public replies are disabled for this update.', 'gp-liveblog' ), array( 'status' => 403 ) );
+				}
+				if ( ! $is_editor && gplb_reply_throttled( $parent_entry->ID ) ) {
+					return new WP_Error( 'gplb_throttled', __( 'Slow down — please wait a moment between replies.', 'gp-liveblog' ), array( 'status' => 429 ) );
+				}
+				$reply_text = $is_editor ? $text : mb_substr( $text, 0, 600 );
+				if ( '' === trim( $reply_text ) ) {
+					return new WP_Error( 'gplb_empty', __( 'Reply text is required.', 'gp-liveblog' ), array( 'status' => 400 ) );
 				}
 				$rid = wp_insert_post( array(
 					'post_type'      => 'gp_liveblog_entry',
 					'post_status'    => 'publish',
 					'post_parent'    => $id,
 					'post_author'    => get_current_user_id(),
-					'post_title'     => wp_trim_words( wp_strip_all_tags( $text ), 12, '…' ),
-					'post_content'   => $text,
+					'post_title'     => wp_trim_words( wp_strip_all_tags( $reply_text ), 12, '…' ),
+					'post_content'   => $reply_text,
 					'post_date'      => wp_date( 'Y-m-d H:i:s' ),
 					'post_date_gmt'  => gmdate( 'Y-m-d H:i:s' ),
 				) );
 				if ( is_wp_error( $rid ) ) { return $rid; }
 				update_post_meta( $rid, '_gplb_type', 'reply' );
 				update_post_meta( $rid, '_gplb_reply_to', $parent_entry->ID );
+				if ( ! $is_editor ) {
+					$name = isset( $params['author'] ) ? mb_substr( sanitize_text_field( (string) $params['author'] ), 0, 40 ) : '';
+					if ( '' !== $name ) { update_post_meta( $rid, '_gplb_author_name', $name ); }
+				}
 				update_post_meta( $id, '_gplb_last_entry', time() );
 				return array( 'ok' => true, 'reply' => gplb_entry_shape( get_post( $rid ), 'reply' ) );
 			}
@@ -215,6 +248,28 @@ function gplb_rest() {
 			foreach ( $kids as $k ) { wp_delete_post( $k->ID, true ); }
 			wp_delete_post( $e->ID, true );
 			return array( 'ok' => true, 'deleted' => (int) $e->ID );
+		},
+	) );
+
+	/* ── Public-replies toggle (staff): open/close ONE update to viewers ─── */
+	register_rest_route( GPLB_REST, '/entries/(?P<id>\d+)/public-replies', array(
+		'methods'             => 'POST',
+		'permission_callback' => function ( $req ) {
+			$e = get_post( (int) $req['id'] );
+			if ( ! $e || 'gp_liveblog_entry' !== $e->post_type ) { return false; }
+			return gplb_editor_can();
+		},
+		'callback'            => function ( $req ) {
+			$e    = get_post( (int) $req['id'] );
+			$type = get_post_meta( $e->ID, '_gplb_type', true ) ?: 'update';
+			if ( 'reply' === $type || 'note' === $type ) {
+				return new WP_Error( 'gplb_bad_target', __( 'Only updates can be opened for public replies.', 'gp-liveblog' ), array( 'status' => 400 ) );
+			}
+			$body = $req->get_json_params();
+			$on   = ! empty( $body['enabled'] );
+			if ( $on ) { update_post_meta( $e->ID, '_gplb_public_replies', '1' ); }
+			else { delete_post_meta( $e->ID, '_gplb_public_replies' ); }
+			return array( 'ok' => true, 'id' => (int) $e->ID, 'public_replies' => gplb_entry_public_replies( $e->ID ) );
 		},
 	) );
 

@@ -4,7 +4,7 @@ Tags: liveblog, live coverage, events, realtime
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.2.5
+Stable tag: 0.2.6
 License: GPLv2 or later
 
 Real-time live coverage for launches & press events, built into the GP stack.

@@ -158,10 +158,20 @@ function gplb_render_reply( $r ) {
 		. '<div class="gplb-reply-body">' . wp_kses_post( $r['content'] ) . '</div></div>';
 }
 
-function gplb_render_thread( $entry_id, $replies = array() ) {
-	$html = '<div class="gplb-thread" data-entry="' . (int) $entry_id . '"><div class="gplb-thread-list" data-sig="">';
+function gplb_render_thread( $entry_id, $replies = array(), $can_toggle = false, $is_public = false, $show_compose = true ) {
+	$cls  = 'gplb-thread' . ( $is_public ? ' gplb-thread--pub' : '' );
+	$html = '<div class="' . $cls . '" data-entry="' . (int) $entry_id . '"><div class="gplb-thread-list" data-sig="">';
 	foreach ( (array) $replies as $r ) { $html .= gplb_render_reply( $r ); }
-	$html .= '</div><button type="button" class="gplb-reply-btn" data-entry="' . (int) $entry_id . '" title="' . esc_attr__( 'Threaded staff reply', 'gp-liveblog' ) . '">💬 <span class="gplb-reply-label">' . esc_html__( 'Reply', 'gp-liveblog' ) . '</span></button></div>';
+	$html .= '</div>';
+	if ( $can_toggle ) {
+		$html .= '<button type="button" class="gplb-pub-toggle" data-entry="' . (int) $entry_id . '" data-on="' . ( $is_public ? '1' : '0' ) . '" title="' . esc_attr__( 'Open this update to public (viewer) replies', 'gp-liveblog' ) . '">'
+			. ( $is_public ? '🌏 ' . esc_html__( 'Public replies: ON', 'gp-liveblog' ) . ' ✓' : '🌏 ' . esc_html__( 'Public replies: OFF', 'gp-liveblog' ) )
+			. '</button>';
+	}
+	if ( $show_compose && ( $can_toggle || $is_public ) ) {
+		$html .= '<button type="button" class="gplb-reply-btn" data-entry="' . (int) $entry_id . '" title="' . esc_attr__( 'Reply to this update', 'gp-liveblog' ) . '">💬 <span class="gplb-reply-label">' . esc_html__( 'Reply', 'gp-liveblog' ) . '</span></button>';
+	}
+	$html .= '</div>';
 	return $html;
 }
 

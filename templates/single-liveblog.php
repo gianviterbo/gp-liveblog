@@ -19,7 +19,15 @@ $gplb_sub  = get_post_meta( $gplb_id, '_gplb_subtitle', true );
 $gplb_entries = $gplb_live
 	? gplb_get_entries( $gplb_id, 0, 40, $gplb_canpost )
 	: gplb_all_entries( $gplb_id, false );
-$gplb_threads = $gplb_canpost ? gplb_threads_for( wp_list_pluck( $gplb_entries, 'id' ) ) : array();
+// Threads: staff see every thread; visitors only updates opened for public
+// replies (threads map + shells are gated by the same rule below).
+$gplb_thread_ids = array();
+if ( $gplb_canpost ) {
+	$gplb_thread_ids = wp_list_pluck( $gplb_entries, 'id' );
+} else {
+	foreach ( $gplb_entries as $gplb_e ) { if ( ! empty( $gplb_e['public_replies'] ) ) { $gplb_thread_ids[] = $gplb_e['id']; } }
+}
+$gplb_threads = $gplb_thread_ids ? gplb_threads_for( $gplb_thread_ids ) : array();
 
 $gplb_cats = get_the_terms( $gplb_id, 'category' );
 $gplb_cat_names = ( $gplb_cats && ! is_wp_error( $gplb_cats ) ) ? implode( ' · ', wp_list_pluck( $gplb_cats, 'name' ) ) : '';
@@ -147,8 +155,9 @@ get_header();
 				<?php else : ?>
 					<?php foreach ( $gplb_entries as $gplb_e ) : ?>
 						<?php echo gplb_render_entry( $gplb_e ); // phpcs:ignore WordPress.Security.EscapeOutput -- sanitized in renderer ?>
-						<?php if ( $gplb_canpost && 'note' !== $gplb_e['type'] ) : ?>
-							<?php echo gplb_render_thread( $gplb_e['id'], $gplb_threads[ $gplb_e['id'] ] ?? array() ); // phpcs:ignore WordPress.Security.EscapeOutput -- sanitized in renderer ?>
+						<?php $gplb_show_thread = ( $gplb_canpost || ! empty( $gplb_e['public_replies'] ) ) && 'note' !== $gplb_e['type']; ?>
+						<?php if ( $gplb_show_thread ) : ?>
+							<?php echo gplb_render_thread( $gplb_e['id'], $gplb_threads[ $gplb_e['id'] ] ?? array(), $gplb_canpost, ! empty( $gplb_e['public_replies'] ), $gplb_live ); // phpcs:ignore WordPress.Security.EscapeOutput -- sanitized in renderer ?>
 						<?php endif; ?>
 					<?php endforeach; ?>
 				<?php endif; ?>

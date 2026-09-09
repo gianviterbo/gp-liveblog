@@ -94,29 +94,36 @@
 
   /* ── reactions: one per visitor per entry; click toggles/switches ── */
   /* ── threaded staff replies (v0.2.5) — visible to editors only ── */
-  function threadShellHtml(eid) {
-    return '<div class="gplb-thread" data-entry="' + eid + '"><div class="gplb-thread-list" data-sig=""></div><button type="button" class="gplb-reply-btn" data-entry="' + eid + '" title="Threaded staff reply"><span aria-hidden="true">💬</span> <span class="gplb-reply-label">Reply</span></button></div>';
+  function threadShellHtml(eid, pub, canPost) {
+    var cls = 'gplb-thread' + (pub ? ' gplb-thread--pub' : '');
+    var html = '<div class="' + cls + '" data-entry="' + eid + '"><div class="gplb-thread-list" data-sig=""></div>';
+    if (canPost) {
+      html += '<button type="button" class="gplb-pub-toggle" data-entry="' + eid + '" data-on="' + (pub ? '1' : '0') + '" title="Open this update to public (viewer) replies">🌏 <span class="gplb-pub-label">Public replies: ' + (pub ? 'ON ✓' : 'OFF') + '</span></button>';
+    }
+    html += '<button type="button" class="gplb-reply-btn" data-entry="' + eid + '" title="Reply to this update"><span aria-hidden="true">💬</span> <span class="gplb-reply-label">Reply</span></button></div>';
+    return html;
   }
   function renderReplyHtml(r) {
     return '<div class="gplb-reply" data-reply="' + r.id + '"><span class="gplb-reply-who">' + esc(r.author) + '</span><span class="gplb-reply-time">' + esc(r.ts_h) + '</span><div class="gplb-reply-body">' + (r.content || esc(r.raw)) + '</div></div>';
   }
-  function ensureThreadShell(tl, eid) {
-    if (!tl || !cfg.canPost) return null;
+  function ensureThreadShell(tl, eid, allowAnon) {
+    if (!tl) return null;
+    if (!cfg.canPost && !allowAnon) return null;
     var art = tl.querySelector('.gplb-entry[data-id="' + eid + '"]');
     if (!art) return null;
     var shell = tl.querySelector('.gplb-thread[data-entry="' + eid + '"]');
     if (!shell) {
-      art.insertAdjacentHTML('afterend', threadShellHtml(eid));
+      art.insertAdjacentHTML('afterend', threadShellHtml(eid, !!allowAnon, !!cfg.canPost));
       shell = art.nextElementSibling;
     }
     return shell;
   }
   function applyThreads(tl, threads) {
-    if (!tl || !threads || !cfg.canPost) return;
+    if (!tl || !threads) return;
     Object.keys(threads).forEach(function (eidStr) {
       var eid = parseInt(eidStr, 10);
       if (!eid) return;
-      var shell = ensureThreadShell(tl, eid);
+      var shell = ensureThreadShell(tl, eid, !cfg.canPost);
       if (!shell) return;
       var list = shell.querySelector('.gplb-thread-list');
       if (!list) return;
@@ -132,6 +139,29 @@
   function initThreads() {
     if (!cfg.canPost) return;
     document.addEventListener('click', function (ev) {
+      var pubBtn = ev.target && ev.target.closest ? ev.target.closest('.gplb-pub-toggle') : null;
+      if (pubBtn) {
+        var peid = parseInt(pubBtn.getAttribute('data-entry'), 10) || 0;
+        var on = pubBtn.getAttribute('data-on') !== '1';
+        pubBtn.disabled = true;
+        fetch(REST + '/entries/' + peid + '/public-replies', {
+          method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+          body: JSON.stringify({ enabled: on })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            pubBtn.disabled = false;
+            if (d && d.ok) {
+              var shell = pubBtn.closest('.gplb-thread');
+              if (shell) shell.classList.toggle('gplb-thread--pub', !!d.public_replies);
+              pubBtn.setAttribute('data-on', d.public_replies ? '1' : '0');
+              var lbl = pubBtn.querySelector('.gplb-pub-label');
+              if (lbl) lbl.textContent = 'Public replies: ' + (d.public_replies ? 'ON ✓' : 'OFF');
+            }
+          })
+          .catch(function () { pubBtn.disabled = false; });
+        return;
+      }
       var btn = ev.target && ev.target.closest ? ev.target.closest('.gplb-reply-btn') : null;
       if (!btn) return;
       var shell = btn.closest('.gplb-thread');
@@ -361,11 +391,13 @@
         if (empty) empty.remove();
         target.insertBefore(frag, target.firstChild);
         bindReactions(target);
-        if (isLivePage && cfg.canPost) {
+        if (isLivePage && d.threads) {
           fresh.forEach(function (e) {
-            if (e.type !== 'note' && e.type !== 'reply') ensureThreadShell(target, e.id);
+            if (e.type !== 'note' && e.type !== 'reply') {
+              if (cfg.canPost || e.public_replies) ensureThreadShell(target, e.id, !!e.public_replies);
+            }
           });
-          applyThreads(target, d.threads || {});
+          applyThreads(target, d.threads);
         }
         if (isLivePage && d.pinned !== undefined) applyPinned(d.pinned);
         if (isLivePage && d.live === false) document.body.classList.add('gplb-ended');

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GP Liveblog
  * Description: Real-time live coverage for launches & press events — team-authored entries (text, WebP images, link cards, social embeds, private team notes), auto-updating viewer feed, floating LIVE panel, collapsible embeds, LiveBlogPosting schema. Editors post from wp-admin control room or a frontend overlay; Admin owns liveblog lifecycle.
- * Version: 0.2.5
+ * Version: 0.2.6
  * Author: Gadget Pilipinas
  * Text Domain: gp-liveblog
  *
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GPLB_VERSION', '0.2.5' );
+define( 'GPLB_VERSION', '0.2.6' );
 define( 'GPLB_FILE', __FILE__ );
 define( 'GPLB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPLB_URL', plugin_dir_url( __FILE__ ) );
@@ -215,6 +215,27 @@ function gplb_start_liveblog( $id ) {
 function gplb_end_liveblog( $id ) {
 	update_post_meta( $id, '_gplb_status', 'ended' );
 	update_post_meta( $id, '_gplb_ended', time() );
+}
+
+/* ── Public replies per entry (v0.2.6) ───────────────────────────────── */
+
+/** Is this update open for public (viewer) replies? */
+function gplb_entry_public_replies( $entry_id ) {
+	return '1' === (string) get_post_meta( $entry_id, '_gplb_public_replies', true );
+}
+
+/** Crude per-IP throttle for anonymous viewer replies (editors bypass). */
+function gplb_reply_throttled( $entry_id ) {
+	$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? preg_replace( '/[^0-9a-fA-F:.]/', '', (string) $_SERVER['REMOTE_ADDR'] ) : '';
+	if ( ! $ip ) { return true; }
+	$now = time();
+	$per_entry = (int) get_transient( 'gplb_rr_' . md5( $ip . '|' . (int) $entry_id ) );
+	if ( $now - $per_entry < 20 ) { return true; }
+	set_transient( 'gplb_rr_' . md5( $ip . '|' . (int) $entry_id ), $now, 120 );
+	$per_ip = (int) get_transient( 'gplb_rg_' . md5( $ip ) );
+	if ( $per_ip >= 6 ) { return true; }
+	set_transient( 'gplb_rg_' . md5( $ip ), $per_ip + 1, 300 );
+	return false;
 }
 
 /* Track last-entry time on publish (for auto-end). */
@@ -544,13 +565,15 @@ function gplb_threads_for( $entry_ids ) {
 /** Render shape used by REST + server-side render. */
 function gplb_entry_shape( $e, $type = null ) {
 	$type = $type ?: ( get_post_meta( $e->ID, '_gplb_type', true ) ?: 'update' );
-	$author = get_userdata( (int) $e->post_author );
-	$image_id = (int) get_post_meta( $e->ID, '_gplb_image_id', true );
+	$author      = get_userdata( (int) $e->post_author );
+	$author_name = (string) get_post_meta( $e->ID, '_gplb_author_name', true );
+	$image_id    = (int) get_post_meta( $e->ID, '_gplb_image_id', true );
 	return array(
 		'id'        => (int) $e->ID,
 		'type'      => $type,
 		'reply_to'  => (int) get_post_meta( $e->ID, '_gplb_reply_to', true ),
-		'author'    => $author ? $author->display_name : __( 'GP Staff', 'gp-liveblog' ),
+		'public_replies' => '1' === (string) get_post_meta( $e->ID, '_gplb_public_replies', true ),
+		'author'    => $author ? $author->display_name : ( '' !== $author_name ? $author_name : ( 'reply' === $type ? __( 'Viewer', 'gp-liveblog' ) : __( 'GP Staff', 'gp-liveblog' ) ) ),
 		'author_id' => (int) $e->post_author,
 		'ts'        => get_the_date( 'c', $e->ID ),
 		'ts_h'      => get_the_date( 'g:i A', $e->ID ),

@@ -274,3 +274,19 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
   notes intact. REST-level harness check skipped (app-password auth broken in the
   sqlite harness — prod REST auth proven); route code mirrors existing routes.
 - Zip: gp-liveblog-0.2.5.zip (rollback 0.2.4 = gp-liveblog-0.2.4.zip).
+
+## v0.2.6 — per-update PUBLIC replies toggle (deployed mid-event per Gian)
+- Control: staff (admin/editor) can open ANY single update to public viewer
+  replies via a 🌏 "Public replies: ON/OFF" toggle in that update's thread
+  (REST POST /entries/{id}/public-replies). Default OFF for every update —
+  viewers can only ever reply where a staff member enabled it.
+- When ON: the thread under that update is public — viewers see replies and can
+  post (optional display name, 40 chars; text capped 600; IP throttle 1/20s per
+  entry + 6/min per IP → 429). Staff replies there are public too.
+- When OFF: fully staff-only threads as v0.2.5 (viewers see nothing).
+- Viewers' anonymous feed + SEO transcript only ever expose threads under
+  public-enabled updates (REST filter + template gate); author shown as the
+  viewer's name or "Viewer".
+- Harness E2E: anon POST to closed update → 401/denied; to open update → ok w/
+  name; anon feed threads key only for the open entry; flags exposed per entry.
+- Zip: gp-liveblog-0.2.6.zip (rollback 0.2.5 = gp-liveblog-0.2.5.zip).
