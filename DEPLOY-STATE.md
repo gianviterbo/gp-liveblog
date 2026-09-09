@@ -337,3 +337,10 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
 - Viewers never reload: heal only fires when cfg.canPost (front) — control
   room is staff-only by construction.
 - Zip: gp-liveblog-0.2.11.zip (rollback 0.2.10 = gp-liveblog-0.2.10.zip).
+
+## v0.2.12 — HOTFIX: admin/front JS infinite recursion (blank backend)
+- v0.2.11's api() wrapper rewrote its OWN internal fetch() call when the global
+  fetch->api replacement ran → api() called itself → RangeError: stack overflow
+  on load → control room rendered nothing.
+- Fixed: wrapper bodies call native fetch() again. Both scripts verified.
+- Zip: gp-liveblog-0.2.12.zip (rollback 0.2.11 = gp-liveblog-0.2.11.zip).

@@ -9,7 +9,7 @@
      staff-only, so a 403 with code rest_cookie_invalid_nonce is always rot. */
   function api(url, opts) {
     opts = opts || {};
-    return api(url, opts).then(function (r) {
+    return fetch(url, opts).then(function (r) {
       if (r.status === 403 && !healDone) {
         return r.json().catch(function () { return {}; }).then(function (d) {
           if (d.code === 'rest_cookie_invalid_nonce') {
