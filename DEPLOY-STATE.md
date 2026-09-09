@@ -223,3 +223,22 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
   `gp-liveblog-0.1.1-hotfix-rollback.zip`, `gp-liveblog-0.1.2-rollback.zip`,
   `gp-liveblog-0.1.3-rollback.zip`
 - Local harness: /tmp/wptest (volatile, PHP-CLI SQLite — recreated per session if needed)
+
+## v0.2.3 — session LOCK (built + harness-verified, deploy awaiting Gian's go)
+- **Reported:** an activated liveblog auto-stops. Root cause: the idle auto-end in
+  `gplb_is_live()` — 2h (filter `gplb_auto_end_seconds`) after the last entry (or
+  start, if none) the status flips to `ended`. Not a random stop; any lull > 2h
+  ends the session. Entries DO extend it (REST sets post_parent → wp_after_insert_post
+  refreshes `_gplb_last_entry`).
+- **Fix:** `_gplb_locked` meta. While locked, `gplb_is_live()` returns true without
+  the auto-end check. `gplb_set_locked()`: unlock grants a fresh idle window so the
+  session doesn't die instantly after a long locked stretch. Manual End always wins.
+- REST: `/liveblogs/{id}/(?P<action>end|start|lock|unlock)` (+`locked` in response).
+- Control room (admin.php): "🔓 Lock session (no auto-stop)" / "🔒 Locked — stays
+  live until ended" button next to End event; auto-end countdown hint
+  ("Auto-ends around HH:MM if no new entries…") or "Auto-stop disabled (locked).".
+- Harness E2E (WP 6.x + sqlite, fresh rebuild after /tmp wipe): idle3h no-lock →
+  ended ✓; locked+idle3h → live ✓; unlock → fresh window live ✓; manual end while
+  locked → ended ✓.
+- Zip: `gp-liveblog-0.2.3.zip` (rollback = `gp-liveblog-0.2.2.zip`).
+- GitHub main @ 26c0bb6.
