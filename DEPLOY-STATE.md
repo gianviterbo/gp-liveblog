@@ -313,3 +313,10 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
   .gplb-composer from the DOM + drops gplb-canpost (server already gates markup;
   this kills stale cache copies deterministically).
 - Zip: gp-liveblog-0.2.8.zip (rollback 0.2.7 = gp-liveblog-0.2.7.zip).
+
+## v0.2.9 — thread shells on freshly posted updates (composer path)
+- Bug: an update posted from the LIVE-PAGE composer appeared WITHOUT the 💬 Reply
+  / 🌏 toggle because since[id] was set immediately — the 20s poll skipped that
+  id forever, so the shell was never created (old/reloaded entries were fine).
+  Now the composer creates the thread shell right after inserting the entry.
+- Zip: gp-liveblog-0.2.9.zip (rollback 0.2.8 = gp-liveblog-0.2.8.zip).

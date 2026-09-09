@@ -668,6 +668,11 @@
               timeline.insertBefore(el, timeline.firstChild);
               bindReactions(el);
               since[id] = d.entry.id; // keep the poll from re-inserting it
+              // Freshly posted updates need their thread shell right away —
+              // the poll skips this id forever, so nothing else would add it.
+              if (d.entry.type !== 'note' && d.entry.type !== 'reply') {
+                ensureThreadShell(timeline, d.entry.id, false);
+              }
             }
           } else { setStatus((d.message) || 'Failed', true); }
         })
