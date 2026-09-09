@@ -26,7 +26,7 @@
     });
   }
 
-  function renderRows(entries) {
+  function renderRows(entries, threads) {
     if (!rowsEl) return;
     rowsEl.innerHTML = '';
     if (!entries.length) {
@@ -38,7 +38,7 @@
       row.className = 'gplb-admin-row';
       row.innerHTML =
         '<span class="gplb-admin-cell-time">' + esc(e.ts_h) + '</span>' +
-        '<span class="gplb-admin-cell-txt">' + (e.type === 'note' ? '🔒 ' : '') + esc(String(e.raw || '').slice(0, 160)) + '</span>' +
+        '<span class="gplb-admin-cell-txt" data-raw="' + esc(e.raw || '') + '">' + (e.type === 'note' ? '🔒 ' : '') + esc(String(e.raw || '').slice(0, 160)) + '</span>' +
         '<span class="gplb-admin-cell-who">' + esc(e.author) + '</span>' +
         '<span class="gplb-admin-cell-type"><span>' + esc(e.type) + '</span></span>' +
         '<span class="gplb-admin-actions">' +
@@ -46,6 +46,22 @@
         '<button type="button" class="button gplb-del" data-id="' + e.id + '">' + esc(cfg.i18n.delete) + '</button>' +
         '</span>';
       rowsEl.appendChild(row);
+      // Threaded replies under this update (backend management).
+      var reps = (threads && threads[e.id]) || [];
+      reps.forEach(function (r) {
+        var sub = document.createElement('div');
+        sub.className = 'gplb-admin-row gplb-admin-row--reply';
+        sub.innerHTML =
+          '<span class="gplb-admin-cell-time">' + esc(r.ts_h) + '</span>' +
+          '<span class="gplb-admin-cell-txt" data-raw="' + esc(r.raw || '') + '"><span class="gplb-reply-mark">↳</span> ' + (r.public_replies !== undefined && !r.public_replies && r.type === 'reply' ? '' : '') + esc(String(r.raw || '').slice(0, 140)) + '</span>' +
+          '<span class="gplb-admin-cell-who">' + esc(r.author) + '</span>' +
+          '<span class="gplb-admin-cell-type"><span class="gplb-chip-reply">reply</span></span>' +
+          '<span class="gplb-admin-actions">' +
+          '<button type="button" class="button gplb-edit" data-id="' + r.id + '">' + esc(cfg.i18n.edit) + '</button>' +
+          '<button type="button" class="button gplb-del" data-id="' + r.id + '">' + esc(cfg.i18n.delete) + '</button>' +
+          '</span>';
+        rowsEl.appendChild(sub);
+      });
     });
     rowsEl.querySelectorAll('.gplb-del').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -77,7 +93,7 @@
     fetch(REST + '/liveblogs/' + lbId + '/entries?t=' + Date.now())
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (d && d.entries) renderRows(d.entries);
+        if (d && d.entries) renderRows(d.entries, d.threads);
         else rowsEl.textContent = 'Could not load entries.';
       })
       .catch(function () { rowsEl.textContent = 'Could not load entries.'; });

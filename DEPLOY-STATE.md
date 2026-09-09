@@ -290,3 +290,15 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
 - Harness E2E: anon POST to closed update → 401/denied; to open update → ok w/
   name; anon feed threads key only for the open entry; flags exposed per entry.
 - Zip: gp-liveblog-0.2.6.zip (rollback 0.2.5 = gp-liveblog-0.2.5.zip).
+
+## v0.2.7 — reply management in the backend (control room)
+- Control room table now shows threaded replies as indented "↳ reply" sub-rows
+  under their parent update, each with Edit + Delete (uses d.threads from the
+  entries REST response — staff session).
+- Perms: editors/admins may now EDIT and DELETE any reply (not just their own)
+  — needed to moderate public viewer replies; updates still own-or-admin.
+  Editing a reply = text replacement via POST /entries/{id}; deleting an update
+  cascades to its replies (0.2.5).
+- CSS for reply sub-rows; admin.js data-raw attr added so Edit prompts start
+  from the real text.
+- Zip: gp-liveblog-0.2.7.zip (rollback 0.2.6 = gp-liveblog-0.2.6.zip).

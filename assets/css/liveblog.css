@@ -361,3 +361,8 @@ body:not(.gplb-canpost) .gplb-composer { display: none !important; }
 .gplb-pub-toggle { background: none; border: 1px solid var(--gplb-line); border-radius: 999px; font-size: 11px; padding: 2px 10px; cursor: pointer; color: var(--gplb-muted); margin: 6px 8px 0 0; }
 .gplb-thread--pub .gplb-pub-toggle { color: var(--gplb-accent); border-color: var(--gplb-accent); }
 body.gplb-ended .gplb-reply-btn, body.gplb-ended .gplb-pub-toggle { display: none; }
+
+/* Control room: reply sub-rows (backend management, v0.2.7) */
+.gplb-admin-row--reply { background: var(--gplb-soft); border-left: 3px solid var(--gplb-line); padding-left: 14px; font-size: 12.5px; }
+.gplb-admin-row--reply .gplb-reply-mark { color: var(--gplb-muted); margin-right: 2px; }
+.gplb-chip-reply { background: transparent; border: 1px solid var(--gplb-line); border-radius: 999px; padding: 0 8px; font-size: 11px; text-transform: lowercase; color: var(--gplb-muted); }
