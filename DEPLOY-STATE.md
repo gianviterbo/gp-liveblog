@@ -343,4 +343,37 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
   fetch->api replacement ran → api() called itself → RangeError: stack overflow
   on load → control room rendered nothing.
 - Fixed: wrapper bodies call native fetch() again. Both scripts verified.
-- Zip: gp-liveblog-0.2.12.zip (rollback 0.2.11 = gp-liveblog-0.2.11.zip).
+- Zip: `gp-liveblog-0.2.12.zip` (rollback 0.2.11 = gp-liveblog-0.2.11.zip).
+
+## v0.2.13 — end-reason recording (built + parser-verified; deploy awaiting Gian's go)
+- **Why:** the recap cron could not distinguish a MANUAL end ("End event") from the idle
+  AUTO-end — both wrote identical meta (`_gplb_status=ended` + `_gplb_ended`), so the
+  watcher had to infer from timing and had one blind spot: a manual end of a session left
+  unlocked and idle >2h looked exactly like an auto-end. Gian's requirement: "there are
+  liveblogs that automatically stop — don't count that".
+- **Changes (PHP only, no JS/CSS):**
+  - `gplb_end_liveblog()` → writes `_gplb_end_reason = 'manual'`.
+  - idle auto-end branch in `gplb_is_live()` → writes `_gplb_end_reason = 'auto'`.
+  - `gplb_start_liveblog()` → DELETES `_gplb_end_reason` so a re-opened session starts
+    clean (a stale reason would re-fire the recap cron for the previous run).
+  - REST `GET /liveblogs/{id}/state` → now returns `end_reason` ('manual' | 'auto' | ''
+    for sessions ended before this version) and `last_entry_ph`. Also FIXES a stale-read
+    ordering bug: the route read the started/ended meta BEFORE calling `gplb_is_live()`,
+    so the very request that lazily triggered an auto-end returned an empty `ended_ph`.
+- Version 0.2.13 (PHP-only, but the bump is kept: GPLB_VERSION doubles as the caps/rewrite
+  re-grant stamp and the only reliable deploy-verification signal).
+- **Syntax verification without local PHP** (no root on the box, /tmp harness wiped):
+  the exact patched bytes were parsed by the SERVER's PHP 8 via a temporary Code Snippets
+  route (`token_get_all($src, TOKEN_PARSE)` — throws ParseError on bad syntax), md5-matched
+  against the local build, then the snippet was deleted (verified gone). Result: both files
+  SYNTAX OK — gp-liveblog.php 34,363 B (md5 429b5b047bc5f8a8410d5383d0a9fb27),
+  includes/rest.php 28,406 B (md5 acc159f0e9a634f3cf3c6dab48d0761a).
+- Cron side: `gplb_manual_end_watch.py` now PREFERS `end_reason` (exact) and keeps the
+  lock/idle heuristic as fallback for pre-0.2.13 sessions; its stdout stayed byte-identical
+  (`gplbmw pending=0 ids=none r=0`, sha256 a0da0be2…) so the monitor baseline needed no
+  change — no spurious agent fire from this patch.
+- Zip: `gp-liveblog-0.2.13.zip` (10 files, integrity OK). Rollback = `gp-liveblog-0.2.12.zip`
+  (byte-verified identical to the build tree before this patch).
+- **Deploy pending Gian's explicit go** → `hosting_deployWordpressPlugin(domain=gadgetpilipinas.net, slug=gp-liveblog, pluginPath=build dir)`.
+- Post-deploy verification plan: state route returns `end_reason` + `last_entry_ph`;
+  manual end on a test session → 'manual'; idle auto-end → 'auto'; re-open clears it.

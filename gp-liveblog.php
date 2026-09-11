@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GP Liveblog
  * Description: Real-time live coverage for launches & press events — team-authored entries (text, WebP images, link cards, social embeds, private team notes), auto-updating viewer feed, floating LIVE panel, collapsible embeds, LiveBlogPosting schema. Editors post from wp-admin control room or a frontend overlay; Admin owns liveblog lifecycle.
- * Version: 0.2.12
+ * Version: 0.2.13
  * Author: Gadget Pilipinas
  * Text Domain: gp-liveblog
  *
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GPLB_VERSION', '0.2.12' );
+define( 'GPLB_VERSION', '0.2.13' );
 define( 'GPLB_FILE', __FILE__ );
 define( 'GPLB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPLB_URL', plugin_dir_url( __FILE__ ) );
@@ -183,6 +183,9 @@ function gplb_is_live( $liveblog_id ) {
 	if ( time() - $ref > $ttl ) {
 		update_post_meta( $liveblog_id, '_gplb_status', 'ended' );
 		update_post_meta( $liveblog_id, '_gplb_ended', time() );
+		// v0.2.13: record WHY it ended. The idle timeout is not a human ending
+		// the session — the recap cron must ignore these (Gian's rule).
+		update_post_meta( $liveblog_id, '_gplb_end_reason', 'auto' );
 		return false;
 	}
 	return true;
@@ -211,10 +214,15 @@ function gplb_start_liveblog( $id ) {
 	update_post_meta( $id, '_gplb_status', 'live' );
 	update_post_meta( $id, '_gplb_started', time() );
 	update_post_meta( $id, '_gplb_last_entry', time() );
+	// v0.2.13: a re-opened session starts clean — a stale "ended" reason would
+	// otherwise make the recap cron re-fire for the previous run of this event.
+	delete_post_meta( $id, '_gplb_end_reason' );
 }
 function gplb_end_liveblog( $id ) {
 	update_post_meta( $id, '_gplb_status', 'ended' );
 	update_post_meta( $id, '_gplb_ended', time() );
+	// v0.2.13: a human pressed "End event" — the recap cron fires on this only.
+	update_post_meta( $id, '_gplb_end_reason', 'manual' );
 }
 
 /* ── Public replies per entry (v0.2.6) ───────────────────────────────── */

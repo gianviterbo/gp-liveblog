@@ -293,10 +293,15 @@ function gplb_rest() {
 			if ( 'gp_liveblog' !== get_post_type( $id ) ) {
 				return new WP_Error( 'gplb_not_found', __( 'Liveblog not found.', 'gp-liveblog' ), array( 'status' => 404 ) );
 			}
-			$started = (int) get_post_meta( $id, '_gplb_started', true );
-			$ended   = (int) get_post_meta( $id, '_gplb_ended', true );
+			// v0.2.13: resolve live FIRST — gplb_is_live() may lazily flip the
+			// session to ended (idle auto-end). Reading the meta before that call
+			// returned a stale, empty ended_ph on the very request that ended it.
+			$live       = gplb_is_live( $id );
+			$started    = (int) get_post_meta( $id, '_gplb_started', true );
+			$ended      = (int) get_post_meta( $id, '_gplb_ended', true );
+			$last_entry = (int) get_post_meta( $id, '_gplb_last_entry', true );
 			return array(
-				'live'          => gplb_is_live( $id ),
+				'live'          => $live,
 				'locked'        => gplb_is_locked( $id ),
 				'status'        => gplb_live_status( $id ),
 				'watching'      => (int) get_post_meta( $id, '_gplb_watching', true ) ?: 0,
@@ -306,6 +311,10 @@ function gplb_rest() {
 				) ),
 				'started_ph'    => $started ? gmdate( 'Y-m-d H:i:s', $started + 8 * 3600 ) : '',
 				'ended_ph'      => $ended ? gmdate( 'Y-m-d H:i:s', $ended + 8 * 3600 ) : '',
+				// v0.2.13: 'manual' = an editor pressed End event; 'auto' = idle
+				// timeout; '' = ended before this version (reason unknown).
+				'end_reason'    => (string) get_post_meta( $id, '_gplb_end_reason', true ),
+				'last_entry_ph' => $last_entry ? gmdate( 'Y-m-d H:i:s', $last_entry + 8 * 3600 ) : '',
 			);
 		},
 	) );
