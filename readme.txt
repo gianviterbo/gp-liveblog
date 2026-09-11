@@ -4,7 +4,7 @@ Tags: liveblog, live coverage, events, realtime
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.2.12
+Stable tag: 0.2.13
 License: GPLv2 or later
 
 Real-time live coverage for launches & press events, built into the GP stack.
@@ -60,6 +60,13 @@ No. Pages render server-side and cache normally; live updates ride a
 cache-busted REST poll, so LiteSpeed/Bunny HTML caching is untouched.
 
 == Changelog ==
+= 0.2.13 =
+* Sessions now record WHY they ended: `_gplb_end_reason` = `manual` when an editor
+  presses "End event", `auto` when the idle timeout ends it. Re-opening a session
+  clears it. Exposed on the admin state endpoint along with `last_entry_ph`
+  (drives the liveblog recap cron, which must only fire for manual ends).
+* Fixed: the state endpoint could report an empty `ended_ph` on the very request
+  that triggered a lazy idle auto-end (meta was read before resolving live state).
 = 0.2.0 =
 * Viewer reactions on every entry (live page + embeds): like/smile/laugh/
   sad/dislike/doubt/angry — one per visitor, switchable; counts everywhere.

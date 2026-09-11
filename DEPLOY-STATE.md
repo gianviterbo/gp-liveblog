@@ -345,7 +345,7 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
 - Fixed: wrapper bodies call native fetch() again. Both scripts verified.
 - Zip: `gp-liveblog-0.2.12.zip` (rollback 0.2.11 = gp-liveblog-0.2.11.zip).
 
-## v0.2.13 — end-reason recording (built + parser-verified; deploy awaiting Gian's go)
+## v0.2.13 — end-reason recording — DEPLOYED 2026-09-11 (PH), E2E verified
 - **Why:** the recap cron could not distinguish a MANUAL end ("End event") from the idle
   AUTO-end — both wrote identical meta (`_gplb_status=ended` + `_gplb_ended`), so the
   watcher had to infer from timing and had one blind spot: a manual end of a session left
@@ -372,8 +372,23 @@ Deployed: 2026-09-07 (PH) after Gian's "Proceed".
   lock/idle heuristic as fallback for pre-0.2.13 sessions; its stdout stayed byte-identical
   (`gplbmw pending=0 ids=none r=0`, sha256 a0da0be2…) so the monitor baseline needed no
   change — no spurious agent fire from this patch.
-- Zip: `gp-liveblog-0.2.13.zip` (10 files, integrity OK). Rollback = `gp-liveblog-0.2.12.zip`
-  (byte-verified identical to the build tree before this patch).
-- **Deploy pending Gian's explicit go** → `hosting_deployWordpressPlugin(domain=gadgetpilipinas.net, slug=gp-liveblog, pluginPath=build dir)`.
-- Post-deploy verification plan: state route returns `end_reason` + `last_entry_ph`;
-  manual end on a test session → 'manual'; idle auto-end → 'auto'; re-open clears it.
+- Zip: `gp-liveblog-0.2.13.zip` (10 files, integrity OK, rebuilt after the readme bump).
+  Rollback = `gp-liveblog-0.2.12.zip` (byte-verified identical to the build tree pre-patch).
+- **DEPLOYED 2026-09-11 (Gian: "Deploy")** → `hosting_deployWordpressPlugin`, upload dir
+  `gp-liveblog-aUtg7Tfz`, `status: success`, 10/10 files, **every reported size matched the
+  local manifest byte-for-byte** (gp-liveblog.php 34,363 · includes/rest.php 28,406 ·
+  readme.txt 5,329 · liveblog.js 36,193 · liveblog.css 27,301 · admin.php 9,073 ·
+  frontend.php 20,009 · block.js 2,019 · single-liveblog.php 10,190). Stale random dir
+  auto-cleaned (readme → 404).
+- **Prod verification:** canonical `wp-content/plugins/gp-liveblog/readme.txt` serves
+  `Stable tag: 0.2.13`; the live page enqueues `liveblog.js/css?ver=0.2.13`; state route
+  returns the new fields — `{"live":false,"locked":true,"status":"ended",...,
+  "end_reason":"","last_entry_ph":"2026-09-10 02:21:45"}` for the pre-patch Apple session
+  (empty reason = correct legacy behaviour).
+- **Behavioural E2E (prod, throwaway session 212853, fully cleaned up — deleted; re-read 404):**
+  manual end → `end_reason='manual'` ✓ · re-open → reason cleared, status live ✓ ·
+  idle auto-end (temp snippet shortened `gplb_auto_end_seconds` to 3s) → `end_reason='auto'`,
+  `ended_ph` + `last_entry_ph` both populated ✓ (this also confirms the stale-read fix —
+  the call that triggered the lazy auto-end no longer returns an empty `ended_ph`).
+  Temp snippet deleted (verified gone — the DELETE needed a second attempt on this stack).
+  Post-test watcher run: `pending=0` → the test session never leaked into the recap cron.
